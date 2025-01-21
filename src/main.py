@@ -294,6 +294,9 @@ def main() -> None:
                     key = item.get("@Name", "Unknown")
                     value = item.get("#text", "")
 
+                    if value == '-' or value == '':
+                        continue
+
                     # Cleanup hex values - remove padding zeroes
                     if value is not None and str(value).startswith("0x"):
                         value = hex(int(value, 16))
