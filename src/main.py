@@ -7,8 +7,6 @@ from typing import Optional
 import Evtx.Evtx as evtx
 import xmltodict
 
-# Function to convert keys to camelCase
-
 
 def regular_to_camelcase(name: str) -> str:
     output = ''.join(x for x in name.title() if x.isalnum())
@@ -45,10 +43,9 @@ class StandardEventLevel(Enum):
 
 
 class StandardEventKeywords(IntFlag):
-    """Defines the standard keywords that are attached to events by the event provider.
-    Reference: https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.eventing.reader.standardeventkeywords
-
+    """
     Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuse not used in Wazu are ignored.
+    Reference: analysisd/decoders/winevtchannel.c
     """
     AuditFailure = 0x10000000000000
     AuditSuccess = 0x20000000000000
@@ -305,14 +302,12 @@ def main() -> None:
                     original_eventdata_dict[key] = value
 
             # Event category, subcategory and Audit Policy Changes
-
             category, subcategory = get_category_and_subcategory(
                 original_eventdata_dict)
             if category:
                 original_eventdata_dict["category"] = category
             if subcategory:
                 original_eventdata_dict["subcategory"] = subcategory
-
             audit_policy_changes = get_audit_policy_changes(
                 original_eventdata_dict)
             if audit_policy_changes:
