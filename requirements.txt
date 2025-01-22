@@ -1,0 +1,2 @@
+pywin32==308
+xmltodict==0.14.2

@@ -6,6 +6,11 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 ## Usage
 
+* Clone the repository
+* initiate your favorite virtual environment
+* Install dependencies using `pip install -r requirements.txt`
+* Run the script by providing the path to evtx file.
+
 ```shell
 usage: wazuh-evtx.py [-h] [-o OUTPUT] evtx
 
