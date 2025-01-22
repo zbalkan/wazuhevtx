@@ -24,6 +24,8 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 ## Usage
 
+### As a CLI tool
+
 ```shell
 usage: wazuhevtx.py [-h] [-o OUTPUT] evtx
 
@@ -42,6 +44,18 @@ Check the animation for a speed run:
 
 ![Alt Text](./animation.gif)
 
+### As a library
+
+You can use the package as a library to integrate into your scripts.
+
+```python
+from wazuhevtx.evtx2json import EvtxToJson
+...
+converter = EvtxToJson()
+json_logs: list[str] = converter.to_json(evtx_file)
+...
+```
+
 ## Caveats
 
 ### Windows-only
@@ -50,7 +64,7 @@ Due to Windows API dependencies of `win32evtlog`, the script works on Windows sy
 
 ### Workaround for testing
 
-In order to be able to test with logtest, you need a workaround as we are sending JSON logs, not `event_channel` format.
+In order to be able to test with `wazuh-logtest` utility, you need a workaround as we are sending JSON logs, not `event_channel` format.
 
 * Navigate to `/var/ossec/ruleset/rules/0575-win-base_rules.xml` file.
 * Update the rule 60000 this way:
