@@ -135,13 +135,12 @@ class EventLogParser:
         }
 
         # Populate the `system` section with normalized common fields
-        system_section = standardized_log["win"]["system"]
-        system_fields = data_dict.get("Event", {}).get("System", {})
+        event_system = standardized_log["win"]["system"]
 
         # Apply normalization for common fields in the `system` section
         for xml_path, target_key in self.common_fields.items():
             keys = xml_path.split(".")
-            value = system_fields
+            value = data_dict.get("Event", {}).get("System", {})
             for key in keys:
                 value = value.get(key, {}) if isinstance(value, dict) else None
                 if value:
@@ -152,27 +151,27 @@ class EventLogParser:
                         if not any(value.values()):  # type: ignore
                             continue
                     else:
-                        system_section[target_key] = value
+                        event_system[target_key] = value
 
         # Set the severity value after processing common fields
-        logLevel = int(system_section["level"])
+        logLevel = int(event_system["level"])
         if logLevel != 0:
-            system_section["severityValue"] = (
+            event_system["severityValue"] = (
                 self.StandardEventLevel(int(logLevel))).name
         elif logLevel <= 5:
-            keywords = int(system_section["keywords"], 0)
+            keywords = int(event_system["keywords"], 0)
             if (keywords & self.StandardEventKeywords.AuditFailure.value):
-                system_section["severityValue"] = "AUDIT_FAILURE"
+                event_system["severityValue"] = "AUDIT_FAILURE"
             elif (keywords & self.StandardEventKeywords.AuditSuccess.value):
-                system_section["severityValue"] = "AUDIT_SUCCESS"
+                event_system["severityValue"] = "AUDIT_SUCCESS"
             else:
-                system_section["severityValue"] = "UNKNOWN"
+                event_system["severityValue"] = "UNKNOWN"
 
         # Format datetime. We lose one digit of precision here due to Python's datetime limitations.
-        system_section["systemTime"] = str(system_section["systemTime"])
+        event_system["systemTime"] = str(event_system["systemTime"])
 
         # Capture the original `eventdata` dictionary to format `message`
-        eventdata_dict = {}
+        event_data = {}
         for item in data_dict.get("Event", {}).get("EventData", {}).get("Data", []):
             if isinstance(item, dict):
                 key = item.get("@Name", "Unknown")
@@ -185,43 +184,42 @@ class EventLogParser:
                 if value is not None and str(value).startswith("0x"):
                     value = hex(int(value, 16))
 
-                eventdata_dict[key] = value
+                event_data[key] = value
 
         # Event category, subcategory and Audit Policy Changes
         category, subcategory = self.__get_category_and_subcategory(
-            eventdata_dict)
+            event_data)
         if category:
-            eventdata_dict["category"] = category
+            event_data["category"] = category
         if subcategory:
-            eventdata_dict["subcategory"] = subcategory
-        audit_policy_changes = self.__get_audit_policy_changes(eventdata_dict)
+            event_data["subcategory"] = subcategory
+        audit_policy_changes = self.__get_audit_policy_changes(event_data)
         if audit_policy_changes:
-            eventdata_dict["auditPolicyChanges"] = audit_policy_changes
+            event_data["auditPolicyChanges"] = audit_policy_changes
 
-        provider_name_value = system_section['providerName']
+        # Extract formatted message or fallback to manually crafted message
         try:
             metadata = win32evtlog.EvtOpenPublisherMetadata(
-                PublisherIdentity=provider_name_value, Session=None, LogFilePath=self.path, Locale=0, Flags=0)
+                PublisherIdentity=event_system['providerName'], Session=None, LogFilePath=self.path, Locale=0, Flags=0)
         except Exception:
             pass
         else:
             try:
                 message = win32evtlog.EvtFormatMessage(
                     metadata, raw_event, win32evtlog.EvtFormatMessageEvent)
-                system_section["message"] = message
+                event_system["message"] = message
             except Exception:
                 # Failed to get formatted message, fallback to manually crafted message
-                message_lines = [f"{key}: {value}" for key,
-                                 value in eventdata_dict.items()]
-                system_section["message"] = "\r\n".join(message_lines)
+                event_system["message"] = "\r\n".join([f"{key}: {value}" for key,
+                                                       value in event_data.items()])
 
-        # Convert EventData fields to camelCase generically
+        # Convert EventData fields to camelCase
+        # We do this after we crafted message to keep field names consistent in Message pseudo-field
         standardized_log["win"]["eventdata"] = self.__convert_keys_to_camel_case(  # type: ignore
-            eventdata_dict)
+            event_data)
 
         # Write or print each JSON entry as newline-delimited JSON
-        json_log = json.dumps(standardized_log) + '\n'
-        return json_log
+        return json.dumps(standardized_log) + '\n'
 
     class StandardEventLevel(Enum):
         """

@@ -17,7 +17,7 @@ def main() -> None:
     if args.output:
         output_path = args.output if args.output.endswith(
             ".json") else args.output + ".json"
-        outfile = open(output_path, "w")
+        outfile = open(output_path, "w", encoding="utf-8")
     else:
         outfile = None
 
