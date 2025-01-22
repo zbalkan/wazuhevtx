@@ -1,4 +1,7 @@
+# Description: This script reads an EVTX file and converts it to JSON format.
+# The way to import EVTX files are based on the example of Birol Capa's blog post.
 # Reference: https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html
+# Other behaviors are based on
 import json
 import pathlib
 from enum import Enum, IntFlag
@@ -108,6 +111,26 @@ class EvtxToJson:
         }
     }
 
+    # Define a set of common fields for normalization
+    __common_fields = {
+        "Provider.@Name": "providerName",
+        "Provider.@Guid": "providerGuid",
+        "EventID.#text": "eventID",
+        "Version": "version",
+        "Level": "level",
+        "Task": "task",
+        "Opcode": "opcode",
+        "Keywords": "keywords",
+        "TimeCreated.@SystemTime": "systemTime",
+        "EventRecordID": "eventRecordID",
+        "Execution.@ProcessID": "processID",
+        "Execution.@ThreadID": "threadID",
+        "Channel": "channel",
+        "Computer": "computer",
+        "Severity": "severityValue",
+        "Correlation": "correlation",
+    }
+
     def to_json(self, evtx_file: pathlib.Path) -> list[str]:
 
         self._path = str(evtx_file.absolute())
@@ -142,7 +165,7 @@ class EvtxToJson:
         event_system = standardized_log["win"]["system"]
 
         # Apply normalization for common fields in the `system` section
-        for xml_path, target_key in self.common_fields.items():
+        for xml_path, target_key in self.__common_fields.items():
             keys = xml_path.split(".")
             value = data_dict.get("Event", {}).get("System", {})
             for key in keys:
@@ -280,26 +303,6 @@ class EvtxToJson:
         subcategory = self.__category_mapping.get(
             category_id, {}).get(subcategory_id, "Unknown")
         return category, subcategory
-
-    # Define a set of common fields for normalization
-    common_fields = {
-        "Provider.@Name": "providerName",
-        "Provider.@Guid": "providerGuid",
-        "EventID.#text": "eventID",
-        "Version": "version",
-        "Level": "level",
-        "Task": "task",
-        "Opcode": "opcode",
-        "Keywords": "keywords",
-        "TimeCreated.@SystemTime": "systemTime",
-        "EventRecordID": "eventRecordID",
-        "Execution.@ProcessID": "processID",
-        "Execution.@ThreadID": "threadID",
-        "Channel": "channel",
-        "Computer": "computer",
-        "Severity": "severityValue",
-        "Correlation": "correlation",
-    }
 
     def __pascal_to_camelcase(self, name: str) -> str:
         return name[0].lower() + name[1:]
