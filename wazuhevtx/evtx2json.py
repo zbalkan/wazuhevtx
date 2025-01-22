@@ -133,6 +133,9 @@ class EvtxToJson:
 
     def to_json(self, evtx_file: pathlib.Path) -> list[str]:
 
+        if (isinstance(evtx_file, str)):
+            evtx_file = pathlib.Path(evtx_file)
+
         self._path = str(evtx_file.absolute())
 
         windows_events: list[str] = []
