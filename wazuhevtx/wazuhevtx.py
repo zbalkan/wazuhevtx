@@ -14,7 +14,7 @@ from evtx2json import EvtxToJson
 def main() -> None:
 
     parser = argparse.ArgumentParser(
-        description="Dump a binary EVTX file into JSON with a standardized structure.")
+        description="Dump a binary EVTX file into JSON with a standardized structure Wazuh agent uses.")
     parser.add_argument("evtx", type=pathlib.Path, action="store",
                         help="Path to the Windows EVTX event log file")
     parser.add_argument("-o", "--output", type=pathlib.Path, required=False,
