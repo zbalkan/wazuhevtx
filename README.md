@@ -38,6 +38,10 @@ options:
                         Path of output JSON file. If not defined, output will be printed to console.
 ```
 
+Check the animation for a speed run:
+
+![Alt Text](./animation.gif)
+
 ## Caveats
 
 ### Windows-only
