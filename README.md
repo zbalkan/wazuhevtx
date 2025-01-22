@@ -7,7 +7,7 @@ Now, you can test your detection capabilities by replaying known attack samples 
 ## Usage
 
 ```shell
-usage: main.py [-h] [-o OUTPUT] evtx
+usage: wazuh-evtx.py [-h] [-o OUTPUT] evtx
 
 Dump a binary EVTX file into JSON with a standardized structure.
 
