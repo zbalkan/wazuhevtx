@@ -4,17 +4,30 @@ A Python tool that parses EVTX files and converts them into JSON formatted logs 
 
 Now, you can test your detection capabilities by replaying known attack samples such as [Windows EVTX Samples](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES).
 
-## Usage
+**Note: It runs on Windows-only!** See Caveats below.
 
-* Clone the repository
+## Installation
+
+### Clone this repository
+
+* Simply `git clone https://github.com/zbalkan/wazuh-evtx.git` and start playing wih it.
 * initiate your favorite virtual environment
 * Install dependencies using `pip install -r requirements.txt`
 * Run the script by providing the path to evtx file.
 
-```shell
-usage: wazuh-evtx.py [-h] [-o OUTPUT] evtx
+### Use pip
 
-Dump a binary EVTX file into JSON with a standardized structure.
+**I do not plan to deploy on PyPi unless the code is stable enough.**
+
+* Install the module using `pip install https://github.com/zbalkan/wazuh-evtx/archive/refs/heads/main.zip`
+* Run the script by providing the path to evtx file.
+
+## Usage
+
+```shell
+usage: wazuhevtx.py [-h] [-o OUTPUT] evtx
+
+Dump a binary EVTX file into JSON with a standardized structure Wazuh agent uses.
 
 positional arguments:
   evtx                  Path to the Windows EVTX event log file
