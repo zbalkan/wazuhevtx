@@ -42,6 +42,6 @@ In order to be able to test with logtest, you need a workaround as we are sendin
 
 ### Message format
 
-In the Event Viewer, there is a formatted message displayed in `General` tab. However, if you navigate to Details tab, you can see the raw XML does not have a field called Message. That field comes from [EvtFormatMessage function](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtformatmessage). When working with live logs, it is easy to get it. For instance, if you use `Get-WinEvent` cmdlet of PowerShell, you will get the Message field populated by `FormatDescription()` function, which eventually wraps the EvtFormatMessage function. They access the event log provider resources to get data about events, while it is not easy to do it with exproted logs. You may not have the same provider or same version of it locally.
+In the Event Viewer, there is a formatted message displayed in the `General` tab. However, if you navigate to the `Details` tab, you can see that the raw XML does not have a field called `Message`. That field comes from [EvtFormatMessage function](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtformatmessage). For instance, if you use `Get-WinEvent` cmdlet of PowerShell, you will get the Message field populated by `FormatDescription()` function, which eventually wraps the EvtFormatMessage function.
 
-I plan to add this capability, and fallback to current solution. But until then, simple concatenation of fields is the way. Expect differences in `message` field.
+However, there may be decoding or version issues that needs special handling. These edge cases are not documented, therefore, I added a fallback solution, basically exports all existing fields to come up with a message text.
