@@ -41,7 +41,8 @@ def main() -> None:
             outfile.write(log)
         outfile.close()
     else:
-        print(json_logs)
+        for log in json_logs:
+            print(log)
 
 
 if __name__ == "__main__":
