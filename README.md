@@ -11,7 +11,7 @@ Now, you can test your detection capabilities by replaying known attack samples 
 ### Clone this repository
 
 * Simply `git clone https://github.com/zbalkan/wazuhevtx.git` and start playing wih it.
-* initiate your favorite virtual environment
+* initiate your favorite virtual environment.
 * Install dependencies using `pip install -r requirements.txt`
 * Run the script by providing the path to evtx file.
 
@@ -19,7 +19,15 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 **I do not plan to deploy on PyPi unless the code is stable enough.**
 
+If you plan to use the library -and CLI:
+
+* initiate your favorite virtual environment.
 * Install the module using `pip install https://github.com/zbalkan/wazuhevtx/archive/refs/heads/main.zip`
+* Run the script by providing the path to evtx file.
+
+If you want to use only CLI tool:
+
+* Install the module using `pipx install https://github.com/zbalkan/wazuhevtx/archive/refs/heads/main.zip`
 * Run the script by providing the path to evtx file.
 
 ## Usage
