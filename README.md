@@ -1,6 +1,6 @@
-# wazuh-evtx
+# wazuhevtx
 
-A Python tool that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuh-evtx is designed as a helper for `wazuh-logtest` tool.
+A Python tool that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for `wazuh-logtest` tool.
 
 Now, you can test your detection capabilities by replaying known attack samples such as [Windows EVTX Samples](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES).
 
@@ -10,7 +10,7 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 ### Clone this repository
 
-* Simply `git clone https://github.com/zbalkan/wazuh-evtx.git` and start playing wih it.
+* Simply `git clone https://github.com/zbalkan/wazuhevtx.git` and start playing wih it.
 * initiate your favorite virtual environment
 * Install dependencies using `pip install -r requirements.txt`
 * Run the script by providing the path to evtx file.
@@ -19,7 +19,7 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 **I do not plan to deploy on PyPi unless the code is stable enough.**
 
-* Install the module using `pip install https://github.com/zbalkan/wazuh-evtx/archive/refs/heads/main.zip`
+* Install the module using `pip install https://github.com/zbalkan/wazuhevtx/archive/refs/heads/main.zip`
 * Run the script by providing the path to evtx file.
 
 ## Usage

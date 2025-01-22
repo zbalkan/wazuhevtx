@@ -1,0 +1,42 @@
+[build-system]
+requires = [
+    "setuptools>=75.8.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wazuhevtx"
+version = "0.1.0"
+description = "Dump a binary EVTX file into JSON with a standardized structure Wazuh agent uses"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Zafer Balkan", email = "zafer@zaferbalkan.com" }
+]
+license = { text = "MIT" }
+keywords = ["wazuh", "evtx", "windows", "eventlog", "security", "monitoring", "logging", "siem"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14"
+]
+
+dependencies = [
+    "pywin32 ==308",
+    "xmltodict ==0.14.2",
+]
+
+[project.urls]
+homepage = "https://github.com/zbalkan/wazuhevtx"
+
+[project.scripts]
+wazuhevtx = "wazuhevtx.wazuhevtx:main"

@@ -144,7 +144,7 @@ mypy.ini
 .pydevproject
 
 # Project specific excludes
-data/
+
 
 # Graphs
 *.svg
