@@ -1,5 +1,6 @@
 # Reference: https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html
 import json
+import pathlib
 from enum import Enum, IntFlag
 from typing import Optional
 
@@ -7,7 +8,10 @@ import win32evtlog
 import xmltodict
 
 
-class EventLogParser:
+class EvtxToJson:
+
+    _path: Optional[str] = None
+
     __audit_policy_changes_map = {
         8448: "Success removed",
         8449: "Success added",
@@ -104,12 +108,12 @@ class EventLogParser:
         }
     }
 
-    def __init__(self, path) -> None:
-        self.path = path
+    def to_json(self, evtx_file: pathlib.Path) -> list[str]:
 
-    def get_all_events(self) -> list[str]:
+        self._path = str(evtx_file.absolute())
+
         windows_events: list[str] = []
-        query_handle = win32evtlog.EvtQuery(str(self.path),
+        query_handle = win32evtlog.EvtQuery(str(self._path),
                                             win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryReverseDirection)
 
         while True:
@@ -200,7 +204,7 @@ class EventLogParser:
         # Extract formatted message or fallback to manually crafted message
         try:
             metadata = win32evtlog.EvtOpenPublisherMetadata(
-                PublisherIdentity=event_system['providerName'], Session=None, LogFilePath=self.path, Locale=0, Flags=0)
+                PublisherIdentity=event_system['providerName'], Session=None, LogFilePath=self._path, Locale=0, Flags=0)
         except Exception:
             pass
         else:
