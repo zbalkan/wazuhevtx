@@ -1,6 +1,6 @@
 # wazuh-evtx
 
-A Python tool that parses EVTX files and converts them into JSON formatted logs similar to Wazuh agent does. It is designed as a helper for `wazuh-logtest` tool.
+A Python tool that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuh-evtx is designed as a helper for `wazuh-logtest` tool.
 
 Now, you can test your detection capabilities by replaying known attack samples such as [Windows EVTX Samples](https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES).
 
@@ -17,7 +17,7 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -o OUTPUT, --output OUTPUT
-                        Path of output JSON file
+                        Path of output JSON file. If not defined, output will be printed to console.
 ```
 
 ## Caveats
@@ -42,6 +42,6 @@ In order to be able to test with logtest, you need a workaround as we are sendin
 
 ### Message format
 
-In the Event Viewer, there is a formatted message displayed in the `General` tab. However, if you navigate to the `Details` tab, you can see that the raw XML does not have a field called `Message`. That field comes from [EvtFormatMessage function](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtformatmessage). For instance, if you use `Get-WinEvent` cmdlet of PowerShell, you will get the Message field populated by `FormatDescription()` function, which eventually wraps the EvtFormatMessage function.
+In the Event Viewer, there is a formatted message displayed in the `General` tab. However, if you navigate to the `Details` tab, you can see that the raw XML does not have a field called `Message`. That field comes from [EvtFormatMessage function](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtformatmessage).
 
 However, there may be decoding or version issues that needs special handling. These edge cases are not documented, therefore, I added a fallback solution, basically exports all existing fields to come up with a message text.
