@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import sys
+
+if sys.platform != "win32":
+    print("This script is intended to be run on Windows.")
+    exit(1)
+
 import argparse
 import pathlib
 

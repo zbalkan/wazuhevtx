@@ -27,6 +27,10 @@ options:
 
 ## Caveats
 
+### Windows-only
+
+Due to Windows API dependencies of `win32evtlog`, the script works on Windows systems only. If you try on a Linux or Mac environment, you will get "This script is intended to be run on Windows." message, and the script will exit with error code 1.
+
 ### Workaround for testing
 
 In order to be able to test with logtest, you need a workaround as we are sending JSON logs, not `event_channel` format.
