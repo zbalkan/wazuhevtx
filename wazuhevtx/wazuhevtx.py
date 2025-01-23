@@ -8,7 +8,12 @@ if sys.platform != "win32":
 import argparse
 import pathlib
 
-from evtx2json import EvtxToJson
+
+# regardless of the relative path handling of the target, we want this to work
+try:
+    from wazuhevtx.evtx2json import EvtxToJson
+except ImportError:
+    from evtx2json import EvtxToJson
 
 
 def main() -> None:
