@@ -149,6 +149,9 @@ class EvtxToJson:
             for raw_event in raw_event_collection:
                 windows_events.append(
                     self.__parse_raw_event(raw_event))
+
+        # Reverse the list to get the events in the correct order
+        windows_events.reverse()
         return windows_events
 
     def __parse_raw_event(self, raw_event) -> str:
