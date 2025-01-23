@@ -87,9 +87,3 @@ In order to be able to test with `wazuh-logtest` utility, you need a workaround 
     <description>Group of windows rules.</description>
 </rule>
 ```
-
-### Message format
-
-In the Event Viewer, there is a formatted message displayed in the `General` tab. However, if you navigate to the `Details` tab, you can see that the raw XML does not have a field called `Message`. That field comes from [EvtFormatMessage function](https://learn.microsoft.com/en-us/windows/win32/api/winevt/nf-winevt-evtformatmessage).
-
-However, there may be decoding or version issues that needs special handling. These edge cases are not documented, therefore, I added a fallback solution, basically exports all existing fields to come up with a message text.
