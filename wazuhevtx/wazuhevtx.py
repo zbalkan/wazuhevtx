@@ -8,7 +8,7 @@ if sys.platform != "win32":
 import argparse
 import pathlib
 
-from wazuhevtx.evtx2json import EvtxToJson
+from evtx2json import EvtxToJson
 
 
 def main() -> None:

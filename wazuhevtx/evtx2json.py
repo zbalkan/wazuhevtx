@@ -1,7 +1,7 @@
 # Description: This script reads an EVTX file and converts it to JSON format.
 # The way to import EVTX files are based on the example of Birol Capa's blog post.
 # Reference: https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html
-# Other behaviors are based on
+# Other behaviors are based on Wazuh agent's behavior.
 import json
 import pathlib
 from enum import Enum, IntFlag
@@ -197,14 +197,23 @@ class EvtxToJson:
             else:
                 event_system["severityValue"] = "UNKNOWN"
 
-        # Format datetime. We lose one digit of precision here due to Python's datetime limitations.
-        event_system["systemTime"] = str(event_system["systemTime"])
+        # Format the `message` field
+        try:
+            # Extract formatted message or fallback to manually crafted message
+            message = self.__format_message(
+                raw_event, event_system['providerName'])
+            event_system["message"] = message
 
-        # Capture the original `eventdata` dictionary to format `message`
-        event_data = {}
+        except Exception:
+            # Failed to get formatted message, fallback to manually crafted message
+            raise Exception("Failed to get formatted message")
+
+        # Populate eventdata section with normalized fields
+        event_data = standardized_log["win"]["eventdata"]
         for item in data_dict.get("Event", {}).get("EventData", {}).get("Data", []):
             if isinstance(item, dict):
                 key = item.get("@Name", "Unknown")
+                key = self.__pascal_to_camelcase(key)
                 value = item.get("#text", "")
 
                 if value == '-' or value == '':
@@ -227,49 +236,16 @@ class EvtxToJson:
         if audit_policy_changes:
             event_data["auditPolicyChanges"] = audit_policy_changes
 
-        # Extract formatted message or fallback to manually crafted message
-        try:
-            metadata = win32evtlog.EvtOpenPublisherMetadata(
-                PublisherIdentity=event_system['providerName'], Session=None, LogFilePath=self._path, Locale=0, Flags=0)
-        except Exception:
-            pass
-        else:
-            try:
-                message = win32evtlog.EvtFormatMessage(
-                    metadata, raw_event, win32evtlog.EvtFormatMessageEvent)
-                event_system["message"] = message
-            except Exception:
-                # Failed to get formatted message, fallback to manually crafted message
-                event_system["message"] = "\r\n".join([f"{key}: {value}" for key,
-                                                       value in event_data.items()])
-
-        # Convert EventData fields to camelCase
-        # We do this after we crafted message to keep field names consistent in Message pseudo-field
-        standardized_log["win"]["eventdata"] = self.__convert_keys_to_camel_case(  # type: ignore
-            event_data)
-
         # Write or print each JSON entry as newline-delimited JSON
         return json.dumps(standardized_log) + '\n'
 
-    class StandardEventLevel(Enum):
-        """
-        Enum for standardizing event log levels
-        Reference: https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.eventing.reader.standardeventlevel
-        """
-        AUDIT = 0  # How Wazuh handles this
-        CRITICAL = 1
-        ERROR = 2
-        WARNING = 3
-        INFORMATION = 4
-        VERBOSE = 5
-
-    class StandardEventKeywords(IntFlag):
-        """
-        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuse not used in Wazu are ignored.
-        Reference: analysisd/decoders/winevtchannel.c
-        """
-        AuditFailure = 0x10000000000000
-        AuditSuccess = 0x20000000000000
+    def __format_message(self, event_handle, provider_name: str) -> str:
+        metadata = win32evtlog.EvtOpenPublisherMetadata(
+            PublisherIdentity=provider_name, Session=None, LogFilePath=self._path, Locale=0, Flags=0)
+        xml: str = win32evtlog.EvtFormatMessage(
+            metadata, event_handle, win32evtlog.EvtFormatMessageXml)
+        return str(xmltodict.parse(
+            xml)['Event']['RenderingInfo']['Message'])
 
     def __get_audit_policy_changes(self, original_eventdata_dict) -> Optional[str]:
         audit_policy_changes_id = original_eventdata_dict.get(
@@ -310,13 +286,22 @@ class EvtxToJson:
     def __pascal_to_camelcase(self, name: str) -> str:
         return name[0].lower() + name[1:]
 
-    def __convert_keys_to_camel_case(self, data):
+    class StandardEventLevel(Enum):
         """
-        Recursive function to apply camelCase conversion to all keys in a nested dictionary structure.
+        Enum for standardizing event log levels
+        Reference: https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.eventing.reader.standardeventlevel
         """
-        if isinstance(data, dict):
-            return {self.__pascal_to_camelcase(k): self.__convert_keys_to_camel_case(v) for k, v in data.items()}
-        elif isinstance(data, list):
-            return [self.__convert_keys_to_camel_case(i) for i in data]
-        else:
-            return data
+        AUDIT = 0  # How Wazuh handles this
+        CRITICAL = 1
+        ERROR = 2
+        WARNING = 3
+        INFORMATION = 4
+        VERBOSE = 5
+
+    class StandardEventKeywords(IntFlag):
+        """
+        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuse not used in Wazu are ignored.
+        Reference: analysisd/decoders/winevtchannel.c
+        """
+        AuditFailure = 0x10000000000000
+        AuditSuccess = 0x20000000000000
