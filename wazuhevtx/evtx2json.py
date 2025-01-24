@@ -233,7 +233,7 @@ class EvtxToJson:
         if audit_policy_changes:
             event_data["auditPolicyChanges"] = audit_policy_changes
 
-        return json.dumps(standardized_log)
+        return json.dumps(standardized_log) + '\n'
 
     def __format_message(self, event_handle, provider_name: str) -> str:
         metadata = win32evtlog.EvtOpenPublisherMetadata(
