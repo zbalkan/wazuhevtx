@@ -58,10 +58,10 @@ You can use the package as a library to integrate into your scripts.
 
 ```python
 from wazuhevtx.evtx2json import EvtxToJson
-...
-converter = EvtxToJson()
-json_logs: list[str] = converter.to_json(evtx_file)
-...
+
+for log in converter.to_json(evtx_file):
+    print(log)
+
 ```
 
 ## Caveats
@@ -87,3 +87,6 @@ In order to be able to test with `wazuh-logtest` utility, you need a workaround 
     <description>Group of windows rules.</description>
 </rule>
 ```
+## Thanks
+
+Thanks to [Birol Capa](https://github.com/birolcapa) for [his article](https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html) pointing to the simplest way to parse EVTX files. Before that I tried many different solutions that were limited after some point.

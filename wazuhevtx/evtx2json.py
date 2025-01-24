@@ -5,7 +5,7 @@
 import json
 import pathlib
 from enum import Enum, IntFlag
-from typing import Optional
+from typing import Any, Generator, Optional
 
 import win32evtlog
 import xmltodict
@@ -131,28 +131,22 @@ class EvtxToJson:
         "Correlation": "correlation",
     }
 
-    def to_json(self, evtx_file: pathlib.Path) -> list[str]:
+    def to_json(self, evtx_file: pathlib.Path) -> Generator[str, Any, None]:
 
         if (isinstance(evtx_file, str)):
             evtx_file = pathlib.Path(evtx_file)
 
         self._path = str(evtx_file.absolute())
 
-        windows_events: list[str] = []
         query_handle = win32evtlog.EvtQuery(str(self._path),
-                                            win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryReverseDirection)
+                                            win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
 
         while True:
             raw_event_collection = win32evtlog.EvtNext(query_handle, 1)
             if len(raw_event_collection) == 0:
                 break
             for raw_event in raw_event_collection:
-                windows_events.append(
-                    self.__parse_raw_event(raw_event))
-
-        # Reverse the list to get the events in the correct order
-        windows_events.reverse()
-        return windows_events
+                yield self.__parse_raw_event(raw_event)
 
     def __parse_raw_event(self, raw_event) -> str:
         record = win32evtlog.EvtRender(
@@ -239,8 +233,7 @@ class EvtxToJson:
         if audit_policy_changes:
             event_data["auditPolicyChanges"] = audit_policy_changes
 
-        # Write or print each JSON entry as newline-delimited JSON
-        return json.dumps(standardized_log) + '\n'
+        return json.dumps(standardized_log)
 
     def __format_message(self, event_handle, provider_name: str) -> str:
         metadata = win32evtlog.EvtOpenPublisherMetadata(
