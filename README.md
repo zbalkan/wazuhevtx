@@ -37,7 +37,7 @@ If you want to use only CLI tool:
 ```shell
 usage: wazuhevtx.py [-h] [-o OUTPUT] evtx
 
-Dump a binary EVTX file into JSON with a standardized structure Wazuh agent uses.
+A Python tool that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool.
 
 positional arguments:
   evtx                  Path to the Windows EVTX event log file
