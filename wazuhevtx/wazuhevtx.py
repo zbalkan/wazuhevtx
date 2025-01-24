@@ -8,7 +8,6 @@ if sys.platform != "win32":
 import argparse
 import pathlib
 
-
 # regardless of the relative path handling of the target, we want this to work
 try:
     from wazuhevtx.evtx2json import EvtxToJson
@@ -39,15 +38,14 @@ def main() -> None:
         return
 
     converter = EvtxToJson()
-    json_logs: list[str] = converter.to_json(evtx_file)
+    for log in converter.to_json(evtx_file):
+        if outfile:
+            outfile.write(log)
+        else:
+            print(log)
 
     if outfile:
-        for log in json_logs:
-            outfile.write(log)
         outfile.close()
-    else:
-        for log in json_logs:
-            print(log)
 
 
 if __name__ == "__main__":

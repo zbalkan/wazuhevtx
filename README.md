@@ -58,10 +58,10 @@ You can use the package as a library to integrate into your scripts.
 
 ```python
 from wazuhevtx.evtx2json import EvtxToJson
-...
-converter = EvtxToJson()
-json_logs: list[str] = converter.to_json(evtx_file)
-...
+
+for log in converter.to_json(evtx_file):
+    print(log)
+
 ```
 
 ## Caveats
