@@ -20,7 +20,7 @@ class EventsToJson:
     _channel: str
     _query: str
 
-    __query_handle: Any = None
+    __query_handle = None  # PyEVT_HANDLE
 
     __audit_policy_changes_map = {
         8448: "Success removed",
@@ -196,6 +196,9 @@ class EventsToJson:
 
     def to_json(self) -> Generator[str, Any, None]:
         """Fetches past events from the Windows Event Log and returns them as JSON."""
+
+        if self.__query_handle is None:
+            raise ValueError("Please define a log source using either from_file or from_live method.")
 
         while True:
             try:
