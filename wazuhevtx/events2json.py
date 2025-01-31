@@ -1,4 +1,3 @@
-# Description: This script reads an EVTX file and converts it to JSON format.
 # The way to import EVTX files are based on the example of Birol Capa's blog post.
 # Reference: https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html
 # Other behaviors are based on Wazuh agent's behavior.
