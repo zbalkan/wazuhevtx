@@ -4,16 +4,22 @@
 # Other behaviors are based on Wazuh agent's behavior.
 import json
 import pathlib
+import re
 from enum import Enum, IntFlag
 from typing import Any, Generator, Optional
 
+import pywintypes
 import win32evtlog
 import xmltodict
 
 
-class EvtxToJson:
+class EventsToJson:
 
     _path: Optional[str] = None
+    _channel: str
+    _query: str
+
+    __query_handle: Any = None
 
     __audit_policy_changes_map = {
         8448: "Success removed",
@@ -131,22 +137,78 @@ class EvtxToJson:
         "Correlation": "correlation",
     }
 
-    def to_json(self, evtx_file: pathlib.Path) -> Generator[str, Any, None]:
+    def from_live(self, localfile: str) -> None:
+
+        channel_match = re.search(r"<location>(.*?)</location>", localfile, re.DOTALL)
+        if channel_match:
+            self._channel = channel_match.group(1).strip()
+        else:
+            raise Exception("Channel field not found in the localfile.")
+
+        # Sanitize query before parsing
+        # Localfile is an XML text that contains an embedded XML data, where <, and > characters are escaped with \.
+        # We must extract the "query" field, then escape it without parsing it as XML, and then parse the rest as XML.
+        # Then we can parse escaped XML data as XML.
+        # The following code is a simple example of how to extract the "query" field from the localfile.
+        query_match = re.search(r"<query>(.*?)</query>", localfile, re.DOTALL)
+        if query_match:
+            escaped_query = query_match.group(1).strip()
+            escaped_query = escaped_query.replace("&lt;", "<").replace("&gt;", ">").replace("\\<", "<").replace("\\>", ">")
+
+            try:
+                xmltodict.parse(escaped_query)  # Ensure it's well-formed XML
+                self._query = escaped_query
+            except Exception as e:
+                raise ValueError(
+                    f"Invalid query XML: {e}\nQuery: {escaped_query}")
+        else:
+            raise Exception("Query field not found in the localfile.")
+
+        print("Querying event logs...")  # Debugging output
+
+        try:
+            self.__query_handle = win32evtlog.EvtQuery(
+                Path=self._channel,
+                Flags=win32evtlog.EvtQueryReverseDirection,  # Reads past events
+                Query=self._query)
+        except pywintypes.error as e:
+            if e.winerror == 5:
+                raise ValueError(
+                    f"Access denied for the requested event channel '{self._channel}'. Please run the script with administrative privileges.")
+            raise ValueError(f"EvtQuery failed: {e} {type(e)}")
+        except Exception as e:
+            raise ValueError(f"EvtQuery failed: Invalid handle received: {e} {type(e)}")
+
+        print("Query successful! Fetching events...")  # Debugging output
+
+    def from_file(self, evtx_file: pathlib.Path) -> None:
 
         if (isinstance(evtx_file, str)):
             evtx_file = pathlib.Path(evtx_file)
 
         self._path = str(evtx_file.absolute())
 
-        query_handle = win32evtlog.EvtQuery(str(self._path),
-                                            win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
+        try:
+            self.__query_handle = win32evtlog.EvtQuery(str(self._path), win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
+        except Exception as e:
+            raise ValueError(f"Failed to open EVTX file: {e}")
+
+    def to_json(self) -> Generator[str, Any, None]:
+        """Fetches past events from the Windows Event Log and returns them as JSON."""
 
         while True:
-            raw_event_collection = win32evtlog.EvtNext(query_handle, 1)
-            if len(raw_event_collection) == 0:
+            try:
+                raw_event_collection = win32evtlog.EvtNext(
+                    self.__query_handle, 1)
+                if not raw_event_collection:
+                    break
+
+                for raw_event in raw_event_collection:
+                    yield self.__parse_raw_event(raw_event)
+
+            except Exception as e:
+                print(f"Error retrieving event logs: {e} {type(e)}")
                 break
-            for raw_event in raw_event_collection:
-                yield self.__parse_raw_event(raw_event)
 
     def __parse_raw_event(self, raw_event) -> str:
         record = win32evtlog.EvtRender(
