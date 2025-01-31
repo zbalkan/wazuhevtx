@@ -11,6 +11,8 @@ import pywintypes
 import win32evtlog
 import xmltodict
 
+BATCH_SIZE: int = 50
+
 
 class EventsToJson:
 
@@ -198,7 +200,7 @@ class EventsToJson:
         while True:
             try:
                 raw_event_collection = win32evtlog.EvtNext(
-                    self.__query_handle, 1)
+                    self.__query_handle, BATCH_SIZE)
                 if not raw_event_collection:
                     break
 
@@ -357,7 +359,7 @@ class EventsToJson:
 
     class StandardEventKeywords(IntFlag):
         """
-        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuse not used in Wazu are ignored.
+        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The values not used in Wazuh are ignored.
         Reference: analysisd/decoders/winevtchannel.c
         """
         AuditFailure = 0x10000000000000
