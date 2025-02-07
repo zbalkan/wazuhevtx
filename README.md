@@ -96,6 +96,10 @@ If you encounter this error below, you will see that you cannot parse event logs
 Error: The event log file is corrupted. (1500)
 ```
 
+### Log Provider missing
+
+It is possible that the log provider is missing on your computer. For instance, you may not have Sysmon installed on the analyst workstation, therefore the formatted message may be missing. Then, you will face the error message in the event's message field `Failed to get metadata for provider Microsoft-Windows-Sysmon`. This is by design. You cannot get metadata from a provider that does not exist. If you plan to use `message` field in detections, beware of the error message.
+
 ## Thanks
 
 Thanks to [Birol Capa](https://github.com/birolcapa) for [his article](https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html) pointing to the simplest way to parse EVTX files. Before that I tried many different solutions that were limited after some point.
