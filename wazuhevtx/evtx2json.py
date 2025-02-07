@@ -205,13 +205,12 @@ class EvtxToJson:
 
         # Format the `message` field
         try:
-            # Extract formatted message or fallback to manually crafted message
+            # Extract formatted message or fallback to warning message
             message = self.__format_message(
                 raw_event, event_system['providerName'])
             event_system["message"] = message
 
         except Exception:
-            # Failed to get formatted message, fallback to manually crafted message
             raise Exception("Failed to get formatted message")
 
         # Populate eventdata section with normalized fields
@@ -245,12 +244,17 @@ class EvtxToJson:
         return json.dumps(standardized_log) + '\n'
 
     def __format_message(self, event_handle, provider_name: str) -> str:
-        metadata = win32evtlog.EvtOpenPublisherMetadata(
-            PublisherIdentity=provider_name, Session=None, LogFilePath=self._path, Locale=0, Flags=0)
-        xml: str = win32evtlog.EvtFormatMessage(
-            metadata, event_handle, win32evtlog.EvtFormatMessageXml)
-        return str(xmltodict.parse(
-            xml)['Event']['RenderingInfo']['Message'])
+        try:
+            metadata = win32evtlog.EvtOpenPublisherMetadata(
+                PublisherIdentity=provider_name, Session=None, LogFilePath=self._path, Locale=0, Flags=0)
+            xml: str = win32evtlog.EvtFormatMessage(
+                metadata, event_handle, win32evtlog.EvtFormatMessageXml)
+            return str(xmltodict.parse(
+                xml)['Event']['RenderingInfo']['Message'])
+        except Exception as e:
+            if isinstance(e, pywintypes.error) and e.winerror == 2:
+                return f"Failed to get metadata for provider {provider_name})"
+            return ''  # We do not want to break the structure
 
     def __get_audit_policy_changes(self, original_eventdata_dict) -> Optional[str]:
         audit_policy_changes_id = original_eventdata_dict.get(
