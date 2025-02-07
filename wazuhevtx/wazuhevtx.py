@@ -40,7 +40,7 @@ def main() -> None:
     converter = EvtxToJson()
     for log in converter.to_json(evtx_file):
         if outfile:
-            outfile.write(log)
+            outfile.write(log + "\n")
         else:
             print(log)
 
