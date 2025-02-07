@@ -309,7 +309,7 @@ class EvtxToJson:
 
     class StandardEventKeywords(IntFlag):
         """
-        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuse not used in Wazu are ignored.
+        Wazuh agent uses these when StandardEventLevel enum value is 0 (AUDIT). The valuses not used in Wazuh are ignored.
         Reference: analysisd/decoders/winevtchannel.c
         """
         AuditFailure = 0x10000000000000
