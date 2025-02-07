@@ -146,7 +146,8 @@ class EvtxToJson:
 
         while True:
             try:
-                raw_event_collection = win32evtlog.EvtNext(query_handle, self.BATCH_SIZE)
+                raw_event_collection = win32evtlog.EvtNext(
+                    query_handle, self.BATCH_SIZE)
             except pywintypes.error as e:
                 print(f"Error: {e.strerror} ({e.winerror})")
                 return
@@ -206,14 +207,10 @@ class EvtxToJson:
                 event_system["severityValue"] = "UNKNOWN"
 
         # Format the `message` field
-        try:
-            # Extract formatted message or fallback to warning message
-            message = self.__format_message(
-                raw_event, event_system['providerName'])
-            event_system["message"] = message
-
-        except Exception:
-            raise Exception("Failed to get formatted message")
+        # Extract formatted message or fallback to warning message
+        message = self.__format_message(
+            raw_event, event_system['providerName'])
+        event_system["message"] = message
 
         # Populate eventdata section with normalized fields
         event_data = standardized_log["win"]["eventdata"]
