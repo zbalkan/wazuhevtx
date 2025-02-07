@@ -7,6 +7,7 @@ import pathlib
 from enum import Enum, IntFlag
 from typing import Any, Generator, Optional
 
+import pywintypes
 import win32evtlog
 import xmltodict
 
@@ -142,7 +143,15 @@ class EvtxToJson:
                                             win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
 
         while True:
-            raw_event_collection = win32evtlog.EvtNext(query_handle, 1)
+            try:
+                raw_event_collection = win32evtlog.EvtNext(query_handle, 1)
+            except pywintypes.error as e:
+                print(f"Error: {e.strerror} ({e.winerror})")
+                return
+            except Exception as e:
+                print(f"Error: {e}")
+                return
+
             if len(raw_event_collection) == 0:
                 break
             for raw_event in raw_event_collection:
