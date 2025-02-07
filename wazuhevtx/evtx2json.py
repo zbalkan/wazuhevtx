@@ -14,6 +14,8 @@ import xmltodict
 
 class EvtxToJson:
 
+    BATCH_SIZE: int = 50
+
     _path: Optional[str] = None
 
     __audit_policy_changes_map = {
@@ -144,7 +146,7 @@ class EvtxToJson:
 
         while True:
             try:
-                raw_event_collection = win32evtlog.EvtNext(query_handle, 1)
+                raw_event_collection = win32evtlog.EvtNext(query_handle, self.BATCH_SIZE)
             except pywintypes.error as e:
                 print(f"Error: {e.strerror} ({e.winerror})")
                 return
