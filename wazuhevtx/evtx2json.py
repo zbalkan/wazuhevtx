@@ -217,31 +217,33 @@ class EvtxToJson:
 
         # Populate eventdata section with normalized fields
         event_data = standardized_log["win"]["eventdata"]
-        for item in data_dict.get("Event", {}).get("EventData", {}).get("Data", []):
-            if isinstance(item, dict):
-                key = item.get("@Name", "Unknown")
-                key = self.__pascal_to_camelcase(key)
-                value = item.get("#text", "")
+        event_data_section = data_dict.get("Event", {}).get("EventData", {})
+        if event_data_section is not None and event_data_section != {}:
+            for item in event_data_section.get("Data", []):
+                if isinstance(item, dict):
+                    key = item.get("@Name", "Unknown")
+                    key = self.__pascal_to_camelcase(key)
+                    value = item.get("#text", "")
 
-                if value == '-' or value == '':
-                    continue
+                    if value == '-' or value == '':
+                        continue
 
-                # Cleanup hex values - remove padding zeroes
-                if value is not None and str(value).startswith("0x"):
-                    value = hex(int(value, 16))
+                    # Cleanup hex values - remove padding zeroes
+                    if value is not None and str(value).startswith("0x"):
+                        value = hex(int(value, 16))
 
-                event_data[key] = value
+                    event_data[key] = value
 
-        # Event category, subcategory and Audit Policy Changes
-        category, subcategory = self.__get_category_and_subcategory(
-            event_data)
-        if category:
-            event_data["category"] = category
-        if subcategory:
-            event_data["subcategory"] = subcategory
-        audit_policy_changes = self.__get_audit_policy_changes(event_data)
-        if audit_policy_changes:
-            event_data["auditPolicyChanges"] = audit_policy_changes
+            # Event category, subcategory and Audit Policy Changes
+            category, subcategory = self.__get_category_and_subcategory(
+                event_data)
+            if category:
+                event_data["category"] = category
+            if subcategory:
+                event_data["subcategory"] = subcategory
+            audit_policy_changes = self.__get_audit_policy_changes(event_data)
+            if audit_policy_changes:
+                event_data["auditPolicyChanges"] = audit_policy_changes
 
         return json.dumps(standardized_log)
 
