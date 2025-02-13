@@ -201,18 +201,20 @@ class EvtxToJson:
                         event_system[target_key] = value
 
         # Set the severity value after processing common fields
-        logLevel = int(event_system["level"])
-        if logLevel != 0:
-            event_system["severityValue"] = (
-                self.StandardEventLevel(int(logLevel))).name
-        elif logLevel <= 5:
-            keywords = int(event_system["keywords"], 0)
-            if (keywords & self.StandardEventKeywords.AuditFailure.value):
-                event_system["severityValue"] = "AUDIT_FAILURE"
-            elif (keywords & self.StandardEventKeywords.AuditSuccess.value):
-                event_system["severityValue"] = "AUDIT_SUCCESS"
-            else:
-                event_system["severityValue"] = "UNKNOWN"
+        level = event_system.get("level", None)
+        if level is not None:
+            logLevel = int(level)
+            if logLevel != 0:
+                event_system["severityValue"] = (
+                    self.StandardEventLevel(int(logLevel))).name
+            elif logLevel <= 5:
+                keywords = int(event_system["keywords"], 0)
+                if (keywords & self.StandardEventKeywords.AuditFailure.value):
+                    event_system["severityValue"] = "AUDIT_FAILURE"
+                elif (keywords & self.StandardEventKeywords.AuditSuccess.value):
+                    event_system["severityValue"] = "AUDIT_SUCCESS"
+                else:
+                    event_system["severityValue"] = "UNKNOWN"
 
         # Format the `message` field
         # Extract formatted message or fallback to warning message
