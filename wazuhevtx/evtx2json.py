@@ -165,6 +165,9 @@ class EvtxToJson:
             raw_event, win32evtlog.EvtRenderEventXml)
         data_dict = xmltodict.parse(record)
 
+        if data_dict is None or data_dict == {}:
+            return ''
+
         # Initialize a dictionary for the standardized log structure
         standardized_log = {
             "win": {
