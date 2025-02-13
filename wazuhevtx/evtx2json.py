@@ -163,7 +163,12 @@ class EvtxToJson:
     def __parse_raw_event(self, raw_event) -> str:
         record = win32evtlog.EvtRender(
             raw_event, win32evtlog.EvtRenderEventXml)
-        data_dict = xmltodict.parse(record)
+        data_dict = None
+        try:
+            data_dict = xmltodict.parse(record)
+        except Exception:
+            # Continue to the next event if parsing fails
+            ...
 
         if data_dict is None or data_dict == {}:
             return ''
