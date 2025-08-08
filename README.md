@@ -17,25 +17,23 @@ Now, you can test your detection capabilities by replaying known attack samples 
 
 ### Alternative 2: Use `pip`/`pipx`
 
-**I do not plan to deploy on PyPi unless the code is stable enough.**
-
 If you plan to use the library and CLI:
 
 * initiate your favorite virtual environment.
-* Install the module using `pip install https://github.com/zbalkan/wazuhevtx/archive/refs/heads/main.zip`
-* Run the script by providing the path to evtx file.
+* Install the module using `pip install wazuhevtx`
+* Run the script by providing the path to evtx file. Or you ca just use `import wazuhevtx`
 
 If you want to use only CLI tool:
 
-* Install the module using `pipx install https://github.com/zbalkan/wazuhevtx/archive/refs/heads/main.zip`
+* Install the module using `pipx install wazuhevtx`
 * Run the script by providing the path to evtx file.
 
 ## Usage
 
 ### As a CLI tool
 
-```shell
-usage: wazuhevtx.py [-h] [-o OUTPUT] evtx
+```yaml
+usage: wazuhevtx [-h] [-o OUTPUT] evtx
 
 A Python tool and library that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool.
 
