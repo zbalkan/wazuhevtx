@@ -1,2 +1,2 @@
-pywin32==308
-xmltodict==0.14.2
+pywin32>=311; platform_system=="Windows"
+xmltodict>=0.14.2

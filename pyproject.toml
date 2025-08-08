@@ -7,7 +7,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wazuhevtx"
-version = "0.1.1"
+version = "0.1.2"
 description = "A Python tool and library and library that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -31,8 +31,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "pywin32 ==308",
-    "xmltodict ==0.14.2",
+    "pywin32 >=311",
+    "xmltodict >=0.14.2",
 ]
 
 [project.urls]
