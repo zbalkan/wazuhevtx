@@ -18,7 +18,7 @@ except ImportError:
 def main() -> None:
 
     parser = argparse.ArgumentParser(
-        description="A Python tool that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool.")
+        description="A Python tool and library that parses EVTX files and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool.")
     parser.add_argument("evtx", type=pathlib.Path, action="store",
                         help="Path to the Windows EVTX event log file")
     parser.add_argument("-o", "--output", type=pathlib.Path, required=False,
