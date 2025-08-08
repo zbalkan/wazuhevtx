@@ -3,7 +3,7 @@ name: Publish Python distribution to TestPyPI
 on:
   push:
     tags:
-      - 'pre-v*.*.*'
+      - 'v*.*.*rc*'
   workflow_dispatch:
 
 jobs:
