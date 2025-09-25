@@ -204,17 +204,18 @@ class EvtxToJson:
         level = event_system.get("level", None)
         if level is not None:
             logLevel = int(level)
-            if logLevel != 0:
-                event_system["severityValue"] = (
-                    self.StandardEventLevel(int(logLevel))).name
-            elif logLevel <= 5:
+            if logLevel == 0:
                 keywords = int(event_system["keywords"], 0)
-                if (keywords & self.StandardEventKeywords.AuditFailure.value):
+                if keywords & self.StandardEventKeywords.AuditFailure.value:
                     event_system["severityValue"] = "AUDIT_FAILURE"
-                elif (keywords & self.StandardEventKeywords.AuditSuccess.value):
+                elif keywords & self.StandardEventKeywords.AuditSuccess.value:
                     event_system["severityValue"] = "AUDIT_SUCCESS"
                 else:
                     event_system["severityValue"] = "UNKNOWN"
+            elif 1 <= logLevel <= 5:
+                event_system["severityValue"] = (self.StandardEventLevel(logLevel)).name
+            else:
+                event_system["severityValue"] = "UNKNOWN"
 
         # Format the `message` field
         # Extract formatted message or fallback to warning message
@@ -226,17 +227,17 @@ class EvtxToJson:
         event_data = standardized_log["win"]["eventdata"]
         event_data_section = data_dict.get("Event", {}).get("EventData", {})
         if event_data_section is not None and event_data_section != {}:
-            for item in event_data_section.get("Data", []):
+            for item in event_data_section.get("Data") or []:
                 if isinstance(item, dict):
                     key = item.get("@Name", "Unknown")
                     key = self.__pascal_to_camelcase(key)
                     value = item.get("#text", "")
 
-                    if value == '-' or value == '':
+                    if value is None or value == "-" or value == "":
                         continue
 
                     # Cleanup hex values - remove padding zeroes
-                    if value is not None and str(value).startswith("0x"):
+                    if str(value).startswith("0x") and " " not in str(value):
                         value = hex(int(value, 16))
 
                     event_data[key] = value
