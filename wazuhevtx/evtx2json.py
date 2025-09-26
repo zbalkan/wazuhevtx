@@ -256,9 +256,13 @@ class EvtxToJson:
 
                     # Cleanup hex values - remove padding zeroes
                     if value is not None and str(value).startswith("0x"):
-                        value = hex(int(value, 16))
+                        try:
+                            value = hex(int(value, 16))
+                        except ValueError:
+                            # Edge case for "W32time service is stopping at <date time>, System Tick Count <decimal> with return code: 0x00000000: Success."
+                            ...
 
-                    event_data[key] = value
+                    event_data[key] = str(value)
 
             # Event category, subcategory and Audit Policy Changes
             category, subcategory = self.__get_category_and_subcategory(
