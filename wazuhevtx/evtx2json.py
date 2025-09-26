@@ -336,6 +336,7 @@ class EvtxToJson:
         WARNING = 3
         INFORMATION = 4
         VERBOSE = 5
+        UNKNOWN = 16  # Edge case for WHfB
 
     class StandardEventKeywords(IntFlag):
         """
