@@ -3,6 +3,7 @@
 # Other behaviors are based on Wazuh agent's behavior.
 import json
 import pathlib
+import queue
 import re
 from enum import Enum, IntFlag
 from typing import Any, Generator, Optional
@@ -20,7 +21,9 @@ class EventsToJson:
     _channel: str
     _query: str
 
-    __query_handle = None  # PyEVT_HANDLE
+    __handle = None  # PyEVT_HANDLE
+    __log_queue: queue.Queue = queue.Queue()
+    __live: bool = False
 
     __audit_policy_changes_map = {
         8448: "Success removed",
@@ -138,9 +141,16 @@ class EventsToJson:
         "Correlation": "correlation",
     }
 
+    def on_event(self, action, context, event_handle) -> None:
+        if action == win32evtlog.EvtSubscribeActionDeliver:
+            self.__log_queue.put(event_handle)
+
     def from_live(self, localfile: str) -> None:
 
-        channel_match = re.search(r"<location>(.*?)</location>", localfile, re.DOTALL)
+        self.__live = True
+
+        channel_match = re.search(
+            r"<location>(.*?)</location>", localfile, re.DOTALL)
         if channel_match:
             self._channel = channel_match.group(1).strip()
         else:
@@ -154,7 +164,8 @@ class EventsToJson:
         query_match = re.search(r"<query>(.*?)</query>", localfile, re.DOTALL)
         if query_match:
             escaped_query = query_match.group(1).strip()
-            escaped_query = escaped_query.replace("&lt;", "<").replace("&gt;", ">").replace("\\<", "<").replace("\\>", ">")
+            escaped_query = escaped_query.replace("&lt;", "<").replace(
+                "&gt;", ">").replace("\\<", "<").replace("\\>", ">")
 
             try:
                 xmltodict.parse(escaped_query)  # Ensure it's well-formed XML
@@ -168,17 +179,29 @@ class EventsToJson:
         print("Querying event logs...")  # Debugging output
 
         try:
-            self.__query_handle = win32evtlog.EvtQuery(
-                Path=self._channel,
-                Flags=win32evtlog.EvtQueryReverseDirection,  # Reads past events
-                Query=self._query)
+            if (self.__live):
+                self.__handle = win32evtlog.EvtSubscribe(
+                    ChannelPath=self._channel,
+                    Flags=win32evtlog.EvtSubscribeToFutureEvents,
+                    SignalEvent=None,
+                    Callback=self.on_event,
+                    Context=None,
+                    Query=None
+                )
+            else:
+                self.__handle = win32evtlog.EvtQuery(
+                    Path=self._channel,
+                    Flags=win32evtlog.EvtQueryReverseDirection,  # Reads past events
+                    Query=self._query)
+
         except pywintypes.error as e:
             if e.winerror == 5:
                 raise ValueError(
                     f"Access denied for the requested event channel '{self._channel}'. Please run the script with administrative privileges.")
             raise ValueError(f"EvtQuery failed: {e} {type(e)}")
         except Exception as e:
-            raise ValueError(f"EvtQuery failed: Invalid handle received: {e} {type(e)}")
+            raise ValueError(
+                f"EvtQuery failed: Invalid handle received: {e} {type(e)}")
 
         print("Query successful! Fetching events...")  # Debugging output
 
@@ -190,22 +213,36 @@ class EventsToJson:
         self._path = str(evtx_file.absolute())
 
         try:
-            self.__query_handle = win32evtlog.EvtQuery(str(self._path), win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
+            self.__handle = win32evtlog.EvtQuery(str(
+                self._path), win32evtlog.EvtQueryFilePath | win32evtlog.EvtQueryForwardDirection)
         except Exception as e:
             raise ValueError(f"Failed to open EVTX file: {e}")
 
     def to_json(self) -> Generator[str, Any, None]:
         """Fetches past events from the Windows Event Log and returns them as JSON."""
 
-        if self.__query_handle is None:
-            raise ValueError("Please define a log source using either from_file or from_live method.")
+        if self.__handle is None:
+            raise ValueError(
+                "Please define a log source using either from_file or from_live method.")
 
         while True:
             try:
-                raw_event_collection = win32evtlog.EvtNext(
-                    self.__query_handle, BATCH_SIZE)
+
+                if (self.__live):
+                    raw_event_collection = []
+                    count = 0
+                    while count < BATCH_SIZE and not self.__log_queue.empty():
+                        raw_event_collection.append(self.__log_queue.get())
+                        count += 1
+                else:
+                    raw_event_collection = win32evtlog.EvtNext(
+                        self.__handle, BATCH_SIZE)
+
                 if not raw_event_collection:
-                    break
+                    if (self.__live):
+                        continue
+                    else:
+                        break
 
                 for raw_event in raw_event_collection:
                     yield self.__parse_raw_event(raw_event)

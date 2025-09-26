@@ -20,12 +20,23 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(
         description="A Python tool that parses EVTX files or queries live events, and converts them into JSON formatted logs mimicking Wazuh agent behavior in version 4.x. wazuhevtx is designed as a helper for wazuh-logtest tool.")
-    parser.add_argument("-e", "--evtx", type=pathlib.Path, action="store", required=False,
+    parser.add_argument("-e",
+                        "--evtx",
+                        type=pathlib.Path,
+                        action="store",
+                        required=False,
                         help="Path to the Windows EVTX event log file")
-    parser.add_argument("-l", "--live", type=pathlib.Path, action="store", required=False,
-                        help="Use this flag to parse the live event log from the local machine.")
-    parser.add_argument("-o", "--output", type=pathlib.Path, required=False,
-                        action="store", help="Path of output JSON file. If not defined, output will be printed to console.")
+    parser.add_argument(
+        "-l", "--live",
+        action="store_true",
+        help="Use this flag to parse the live event log from the local machine."
+    )
+    parser.add_argument(
+        "-o", "--output",
+        type=pathlib.Path,
+        required=False,
+        action="store",
+        help="Path of output JSON file. If not defined, output will be printed to console.")
     args = parser.parse_args()
 
     # Open output file if specified, or default to printing to console
