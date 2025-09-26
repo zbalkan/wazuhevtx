@@ -4,6 +4,7 @@
 # Other behaviors are based on Wazuh agent's behavior.
 import json
 import pathlib
+import re
 from enum import Enum, IntFlag
 from typing import Any, Generator, Optional
 
@@ -174,7 +175,7 @@ class EvtxToJson:
             return ''
 
         # Initialize a dictionary for the standardized log structure
-        standardized_log = {
+        standardized_log: dict = {
             "win": {
                 "system": {},
                 "eventdata": {}
@@ -224,9 +225,27 @@ class EvtxToJson:
 
         # Populate eventdata section with normalized fields
         event_data = standardized_log["win"]["eventdata"]
-        event_data_section = data_dict.get("Event", {}).get("EventData", {})
-        if event_data_section is not None and event_data_section != {}:
-            for item in event_data_section.get("Data", []):
+        event_data_section: dict = data_dict.get(
+            "Event", {}).get("EventData", {})
+        if event_data_section:
+            data_list = event_data_section.get("Data") or []
+            if data_list:
+                event_data["data"] = data_list
+            else:
+                hex_str: Optional[str] = event_data_section.get("Binary")
+                if hex_str:
+                    decoded_str = bytes.fromhex(hex_str).decode(
+                        "utf-8", errors="replace")
+                    if re.search(r"-\s*\w+:", decoded_str):
+                        pair_pattern = re.compile(
+                            r"-\s*(\w+):\s*(.*?)(?=\s*-\s*\w+:|$)")
+                        event_data["binary"] = {
+                            key.lower(): value.strip() for key, value in pair_pattern.findall(decoded_str)
+                        }
+                    else:
+                        event_data["binary"] = decoded_str
+
+            for item in data_list:
                 if isinstance(item, dict):
                     key = item.get("@Name", "Unknown")
                     key = self.__pascal_to_camelcase(key)
@@ -237,9 +256,13 @@ class EvtxToJson:
 
                     # Cleanup hex values - remove padding zeroes
                     if value is not None and str(value).startswith("0x"):
-                        value = hex(int(value, 16))
+                        try:
+                            value = hex(int(value, 16))
+                        except ValueError:
+                            # Edge case for "W32time service is stopping at <date time>, System Tick Count <decimal> with return code: 0x00000000: Success."
+                            ...
 
-                    event_data[key] = value
+                    event_data[key] = str(value)
 
             # Event category, subcategory and Audit Policy Changes
             category, subcategory = self.__get_category_and_subcategory(
@@ -317,6 +340,7 @@ class EvtxToJson:
         WARNING = 3
         INFORMATION = 4
         VERBOSE = 5
+        UNKNOWN = 16  # Edge case for WHfB
 
     class StandardEventKeywords(IntFlag):
         """
