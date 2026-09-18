@@ -101,3 +101,7 @@ It is possible that the log provider is missing on your computer. For instance, 
 ## Thanks
 
 Thanks to [Birol Capa](https://github.com/birolcapa) for [his article](https://birolcapa.github.io/software/2021/09/24/how-to-read-evtx-file-using-python.html) pointing to the simplest way to parse EVTX files. Before that I tried many different solutions that were limited after some point.
+
+## License
+
+GNU General Public License version 2 only. See [LICENSE](LICENSE).

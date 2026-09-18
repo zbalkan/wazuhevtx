@@ -14,12 +14,12 @@ requires-python = ">=3.9"
 authors = [
     { name = "Zafer Balkan", email = "zafer@zaferbalkan.com" }
 ]
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 keywords = ["wazuh", "evtx", "windows", "eventlog", "security", "monitoring", "logging", "siem"]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v2 (GPLv2)",
     "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
