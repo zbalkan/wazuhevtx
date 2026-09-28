@@ -98,7 +98,7 @@ Error: The event log file is corrupted. (1500)
 
 ### Log Provider missing
 
-It is possible that the log provider is missing on your computer. For instance, you may not have Sysmon installed on the analyst workstation, therefore the formatted message may be missing. Then, you will face the error message in the event's message field `Failed to get metadata for provider Microsoft-Windows-Sysmon`. This is by design. You cannot get metadata from a provider that does not exist. If you plan to use `message` field in detections, beware of the error message.
+It is possible that the log provider is missing on your computer. For instance, you may not have Sysmon installed on the analyst workstation, so Windows cannot render the formatted event message. Wazuh omits the `win.system.message` field when message rendering fails, and `wazuhevtx` mirrors that behavior. If you plan to use `message` in detections, account for events where the field is absent.
 
 ## Thanks
 
