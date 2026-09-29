@@ -1,12 +1,14 @@
 """Fixture parity with pre-built EventChannel events used for rule testing.
 
-Sources:
-- the 62 `{"win":...}` events in Wazuh 4.14.10
-  ruleset/testing/tests/{win_event_channel,sysmon,powershell}.ini;
-- the 9 events in zbalkan/wazuh-rule-tests tests/test_win_security_rules.py.
+fixtures/rule_test_events.jsonl holds the 71 `{"win":...}` log strings from the
+Wazuh 4.14.10 ruleset tests (ruleset/testing/tests/{win_event_channel,
+win_security,sysmon,powershell}.ini), extracted unchanged. Each line records its
+upstream file:line and test name. The 9 win_security.ini events are identical to
+those in zbalkan/wazuh-rule-tests tests/test_win_security_rules.py.
 
-Both are pre-built JSON fed through the generic JSON decoder, so they confirm
-value formats but not key order or bytes. Each event is checked in two ways:
+The events are pre-built JSON fed through the generic JSON decoder, so they
+confirm value formats but not key order or bytes. Each event is checked in two
+ways:
 
 - value-format invariants shared with the spec (X1, X2, A1, E1, Y2, Y4);
 - a round trip: the event is turned back into single-quoted EvtRender-style XML
@@ -25,19 +27,16 @@ import win32evtlog
 from wazuhevtx.evtx2json import EvtxToJson
 
 
-FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures"
-RULESET_FILES = ("win_event_channel.ini", "sysmon.ini", "powershell.ini")
-RULE_TESTS_FILE = "win_security_rules.jsonl"
+FIXTURE_FILE = pathlib.Path(__file__).parent / "fixtures" / "rule_test_events.jsonl"
 
 OUTLIERS = {
     # Hand-authored 4104 events upstream: the message is raw script text without
     # the Y4 quotes, and powershell.ini:2 ends scriptBlockText with a lone "\".
-    *{("powershell.ini", line) for line in (2, 8, 14, 20, 50)},
-    # 4698 event, identical in upstream ruleset/testing/tests/win_security.ini:32.
-    # It is a valid rule test, but it cannot be DecodeWinevt output: the message
-    # has no closing quote, which cJSON_PrintUnformatted always adds, and
-    # taskContent is cut to "&lt".
-    (RULE_TESTS_FILE, "a_scheduled_task_was_created"),
+    *{f"powershell.ini:{line}" for line in (2, 8, 14, 20, 50)},
+    # 4698 event: a valid rule test, but it cannot be DecodeWinevt output. The
+    # message has no closing quote, which cJSON_PrintUnformatted always adds,
+    # and taskContent is cut to "&lt".
+    "win_security.ini:32",
 }
 
 DERIVED_SYSTEM = {"severityValue", "message"}
@@ -51,22 +50,15 @@ PROVIDER_ATTRIBUTES = {
 
 def load_fixtures():
     fixtures = []
-    for name in RULESET_FILES:
-        path = FIXTURE_DIR / "wazuh_ruleset" / name
-        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-            match = re.match(r"log \d+ pass = (\{.*)$", line)
-            if match:
-                fixtures.append((name, number, json.loads(match.group(1))))
-    path = FIXTURE_DIR / "wazuh_rule_tests" / RULE_TESTS_FILE
-    for line in path.read_text(encoding="utf-8").splitlines():
+    for line in FIXTURE_FILE.read_text(encoding="utf-8").splitlines():
         case = json.loads(line)
-        fixtures.append((RULE_TESTS_FILE, case["id"], json.loads(case["log"])))
+        fixtures.append((case["source"], json.loads(case["log"])))
     return fixtures
 
 
 FIXTURES = load_fixtures()
-PARITY = [f for f in FIXTURES if (f[0], f[1]) not in OUTLIERS]
-IDS = [f"{name}:{number}" for name, number, _ in PARITY]
+PARITY = [f for f in FIXTURES if f[0] not in OUTLIERS]
+IDS = [source for source, _ in PARITY]
 
 
 def xml_derived_values(win):
@@ -141,17 +133,16 @@ def rebuild_xml(win):
 
 
 def test_fixture_counts():
-    """62 upstream ruleset events plus 9 rule-test events; 6 outliers excluded."""
-    ruleset = [f for f in FIXTURES if f[0] in RULESET_FILES]
-    assert len(ruleset) == 62
-    assert len(FIXTURES) - len(ruleset) == 9
+    """71 ruleset events (62 EventChannel/Sysmon/PowerShell + 9 Security); 6 excluded."""
+    assert len(FIXTURES) == 71
+    assert sum(source.startswith("win_security.ini:") for source, _ in FIXTURES) == 9
     assert len(PARITY) == 65
-    assert {(name, number) for name, number, _ in FIXTURES} >= OUTLIERS
+    assert {source for source, _ in FIXTURES} >= OUTLIERS
 
 
-@pytest.mark.parametrize("name, number, fixture", PARITY, ids=IDS)
-def test_fixture_value_invariants(name, number, fixture):
-    """X1, X2, A1, E1, Y2, Y4 value formats hold for every upstream fixture."""
+@pytest.mark.parametrize("source, fixture", PARITY, ids=IDS)
+def test_fixture_value_invariants(source, fixture):
+    """X1, X2, A1, E1, Y2, Y4 value formats hold for every ruleset fixture."""
     win = fixture["win"]
     for field, value in xml_derived_values(win):
         # X2: every XML-derived value is cJSON string content, so each
@@ -176,8 +167,8 @@ def test_fixture_value_invariants(name, number, fixture):
         assert key not in win["system"]
 
 
-@pytest.mark.parametrize("name, number, fixture", PARITY, ids=IDS)
-def test_fixture_round_trip_matches_wazuhevtx(monkeypatch, name, number, fixture):
+@pytest.mark.parametrize("source, fixture", PARITY, ids=IDS)
+def test_fixture_round_trip_matches_wazuhevtx(monkeypatch, source, fixture):
     """Y1-Y4, E1-E6, O1, X2: rebuilt XML decodes to the fixture's field values."""
     message = fixture["win"]["system"].get("message")
     if message is not None:
@@ -192,13 +183,9 @@ def test_fixture_round_trip_matches_wazuhevtx(monkeypatch, name, number, fixture
     assert json.loads(actual) == fixture
 
 
-@pytest.mark.parametrize(
-    "name, number",
-    sorted(OUTLIERS, key=str),
-    ids=[f"{name}:{number}" for name, number in sorted(OUTLIERS, key=str)],
-)
-def test_excluded_outliers_are_hand_authored(name, number):
+@pytest.mark.parametrize("source", sorted(OUTLIERS))
+def test_excluded_outliers_are_hand_authored(source):
     """The excluded events really lack the Y4 quotes, so the exclusion stays honest."""
-    fixture = next(f for n, line, f in FIXTURES if (n, line) == (name, number))
+    fixture = next(f for s, f in FIXTURES if s == source)
     message = fixture["win"]["system"]["message"]
     assert not (message[:1] == message[-1:] == '"')
