@@ -156,6 +156,42 @@ class EvtxToJson:
         record = self.__format_event_string(record)
         record_id = self.__record_id_from_xml(record)
 
+        if self.__agent_payload_too_large(record, message, record_id):
+            return None
+
+        event = self.__parse_event_xml(record, record_id)
+        if event is None:
+            return self.__collapsed_event(message)
+
+        event_system, level, keywords = self.__parse_system(event)
+        has_level_and_keywords = level is not None and keywords is not None
+
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:333-366
+        # (Y3). severityValue follows the System fields and needs both
+        # elements.
+        if has_level_and_keywords:
+            event_system["severityValue"] = self.__severity_value(level, keywords)
+
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:64-86,
+        # 683-691 and src/shared/string_op.c:952 (Y4).
+        if message is not None:
+            event_system["message"] = self.__format_wazuh_message(message)
+
+        standardized_win: dict = {"system": event_system}
+
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:697-715 (E7).
+        event_data = self.__parse_event_data(event, has_level_and_keywords)
+        if event_data:
+            standardized_win["eventdata"] = event_data
+
+        extra_name, extra_data = self.__parse_extra_data(event)
+        if extra_name is not None:
+            standardized_win[self.__pascal_to_camelcase(extra_name)] = extra_data
+
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:725 (S1-S3).
+        return self.__serialize({"win": standardized_win})
+
+    def __agent_payload_too_large(self, record: str, message: Optional[str], record_id: str) -> bool:
         # Wazuh 4.14.10: src/logcollector/read_win_event_channel.c:509-526,
         # src/os_crypto/shared/msgs.c:600-607 and src/client-agent/sendmsg.c:38-42
         # (T1). Oversized EventChannel messages are dropped before analysisd.
@@ -163,16 +199,17 @@ class EvtxToJson:
         if message is not None:
             agent_event["Message"] = message
         agent_event["Event"] = record
-        agent_payload = self.__serialize(agent_event)
-        payload_size = len(agent_payload.encode("utf-8"))
-        if payload_size > 65393:
-            print(
-                f"Warning: dropped EventChannel record from {self._path} "
-                f"(record ID {record_id}, JSON bytes {payload_size})",
-                file=sys.stderr,
-            )
-            return None
+        payload_size = len(self.__serialize(agent_event).encode("utf-8"))
+        if payload_size <= 65393:
+            return False
+        print(
+            f"Warning: dropped EventChannel record from {self._path} "
+            f"(record ID {record_id}, JSON bytes {payload_size})",
+            file=sys.stderr,
+        )
+        return True
 
+    def __parse_event_xml(self, record: str, record_id: str) -> Optional[ElementTree.Element]:
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:152-155
         # and src/os_xml/os_xml.c (X1-X5). DecodeWinevt passes the compact JSON
         # string representation of Event to os_xml. EvtRender uses single-quoted
@@ -185,6 +222,7 @@ class EvtxToJson:
             event = ElementTree.fromstring(parser_record)
             if self.__xml_value_too_large(event):
                 raise ValueError("os_xml value limit exceeded")
+            return event
         except Exception:
             # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:155-163,
             # 683-729 (X3, X4). XML failure collapses the decoded event to the
@@ -194,142 +232,113 @@ class EvtxToJson:
                 f"(record ID {record_id})",
                 file=sys.stderr,
             )
-            return self.__collapsed_event(message)
+            return None
 
-        standardized_win: dict = {}
-        event_system: dict = {}
-        standardized_win["system"] = event_system
-
-        level: Optional[str] = None
-        keywords: Optional[str] = None
-        has_level = False
-        has_keywords = False
-
+    def __parse_system(self, event: ElementTree.Element) -> tuple[dict, Optional[str], Optional[str]]:
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:168-226
         # (S3, Y1, Y2). System fields are appended in XML order. Correlation,
         # securityUserID and userID keep the 4.14.10 quirks and are not emitted
-        # for real EvtRender XML.
+        # for real EvtRender XML. Level and Keywords are returned as None only
+        # when the element is absent.
+        event_system: dict = {}
+        level: Optional[str] = None
+        keywords: Optional[str] = None
+
         system = self.__xml_child(event, "System")
-        if system is not None:
-            for node in system:
-                element = self.__xml_tag(node.tag)
-                if element == "Provider":
-                    for attr, value in node.attrib.items():
-                        attr = self.__xml_tag(attr)
-                        if attr == "Name":
-                            event_system["providerName"] = str(value)
-                        elif attr == "Guid":
-                            event_system["providerGuid"] = str(value)
-                        elif attr == "EventSourceName":
-                            event_system["eventSourceName"] = str(value)
-                elif element == "TimeCreated":
-                    attrs = list(node.attrib.items())
-                    if attrs and self.__xml_tag(attrs[0][0]) == "SystemTime":
-                        event_system["systemTime"] = str(attrs[0][1])
-                elif element == "Execution":
-                    for attr, value in node.attrib.items():
-                        attr = self.__xml_tag(attr)
-                        if attr == "ProcessID":
-                            event_system["processID"] = str(value)
-                        elif attr == "ThreadID":
-                            event_system["threadID"] = str(value)
-                elif element == "Channel":
-                    # Upstream adds channel unconditionally, even when empty.
-                    event_system["channel"] = self.__xml_content(node, empty="")
-                elif element == "Security":
-                    continue
-                elif element == "Level":
-                    has_level = True
-                    level = self.__xml_content(node, empty="")
-                    event_system["level"] = level
-                elif element == "Keywords":
-                    has_keywords = True
-                    keywords = self.__xml_content(node, empty="")
-                    event_system["keywords"] = keywords
-                elif element == "Correlation":
-                    continue
-                else:
-                    value = self.__xml_content(node)
-                    if value:
-                        event_system[self.__pascal_to_camelcase(element)] = value
+        if system is None:
+            return event_system, level, keywords
 
-        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:333-366
-        # (Y3). Both elements are required. strtol() yields 0 for a non-numeric
-        # or empty level, which takes the AUDIT branch like any level 0.
-        if has_level and has_keywords:
-            level_n = self.__parse_strtol(level, 10)
-            keywords_n = self.__parse_strtoull(keywords, 16)
-            severity_value = {
-                1: "CRITICAL",
-                2: "ERROR",
-                3: "WARNING",
-                4: "INFORMATION",
-                5: "VERBOSE",
-            }.get(level_n)
-            if severity_value is None and level_n == 0:
-                if keywords_n & self.StandardEventKeywords.AuditFailure.value:
-                    severity_value = "AUDIT_FAILURE"
-                elif keywords_n & self.StandardEventKeywords.AuditSuccess.value:
-                    severity_value = "AUDIT_SUCCESS"
-            event_system["severityValue"] = severity_value or "UNKNOWN"
+        for node in system:
+            element = self.__xml_tag(node.tag)
+            if element == "Provider":
+                self.__add_system_attributes(node, event_system, {
+                    "Name": "providerName",
+                    "Guid": "providerGuid",
+                    "EventSourceName": "eventSourceName",
+                })
+            elif element == "TimeCreated":
+                attrs = list(node.attrib.items())
+                if attrs and self.__xml_tag(attrs[0][0]) == "SystemTime":
+                    event_system["systemTime"] = str(attrs[0][1])
+            elif element == "Execution":
+                self.__add_system_attributes(node, event_system, {
+                    "ProcessID": "processID",
+                    "ThreadID": "threadID",
+                })
+            elif element == "Channel":
+                # Upstream adds channel unconditionally, even when empty.
+                event_system["channel"] = self.__xml_content(node, empty="")
+            elif element == "Level":
+                level = self.__xml_content(node, empty="")
+                event_system["level"] = level
+            elif element == "Keywords":
+                keywords = self.__xml_content(node, empty="")
+                event_system["keywords"] = keywords
+            elif element in ("Security", "Correlation"):
+                continue
+            else:
+                value = self.__xml_content(node)
+                if value:
+                    event_system[self.__pascal_to_camelcase(element)] = value
 
-        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:64-86,
-        # 683-691 and src/shared/string_op.c:952 (Y4).
-        if message is not None:
-            event_system["message"] = self.__format_wazuh_message(message)
+        return event_system, level, keywords
 
-        event_data: dict = {}
-        unnamed_data = []
-        category_id: Optional[str] = None
-        subcategory_id: Optional[str] = None
-        audit_policy_changes_id: Optional[str] = None
+    def __add_system_attributes(self, node: ElementTree.Element, event_system: dict,
+                                field_names: dict) -> None:
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:176-198 (Y1).
+        # Only the listed attributes are emitted, in XML attribute order.
+        for attr, value in node.attrib.items():
+            field_name = field_names.get(self.__xml_tag(attr))
+            if field_name is not None:
+                event_system[field_name] = str(value)
 
+    def __severity_value(self, level: str, keywords: str) -> str:
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:333-366 (Y3).
+        # strtol() yields 0 for a non-numeric or empty level, which takes the
+        # AUDIT branch like any level 0.
+        level_n = self.__parse_strtol(level, 10)
+        keywords_n = self.__parse_strtoull(keywords, 16)
+        severity_value = {
+            1: "CRITICAL",
+            2: "ERROR",
+            3: "WARNING",
+            4: "INFORMATION",
+            5: "VERBOSE",
+        }.get(level_n)
+        if severity_value is None and level_n == 0:
+            if keywords_n & self.StandardEventKeywords.AuditFailure.value:
+                severity_value = "AUDIT_FAILURE"
+            elif keywords_n & self.StandardEventKeywords.AuditSuccess.value:
+                severity_value = "AUDIT_SUCCESS"
+        return severity_value or "UNKNOWN"
+
+    def __parse_event_data(self, event: ElementTree.Element, has_level_and_keywords: bool) -> dict:
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:227-293
         # (E1-E4). Values already contain the P6/X2 escaping layer.
+        event_data: dict = {}
+        unnamed_data: list = []
+        enrichment_ids: dict = {}
+
         event_data_section = self.__xml_child(event, "EventData")
         if event_data_section is not None:
             for node in event_data_section:
+                value = self.__xml_content(node)
+                if not self.__event_value_is_valid(value):
+                    continue
+                filtered_value = self.__trim_trailing_whitespace(value)
                 element = self.__xml_tag(node.tag)
-                if element == "Data":
-                    value = self.__xml_content(node)
-                    if not self.__event_value_is_valid(value):
-                        continue
-                    filtered_value = self.__trim_trailing_whitespace(value)
-                    attributes = list(node.attrib.items())
-
-                    if attributes:
-                        for attr, attr_value in attributes:
-                            attr = self.__xml_tag(attr)
-                            key = self.__pascal_to_camelcase(str(attr_value))
-                            if attr == "Name":
-                                if key == "categoryId":
-                                    category_id = filtered_value
-                                elif key == "subcategoryId":
-                                    subcategory_id = filtered_value
-
-                                if key == "auditPolicyChanges":
-                                    audit_policy_changes_id = filtered_value
-                                    event_data["auditPolicyChangesId"] = filtered_value
-                                else:
-                                    event_data[key] = filtered_value
-                                break
-
-                            # E3: for a non-Name attribute, Wazuh uses the
-                            # attribute value, not its name, as the field key.
-                            event_data[key] = filtered_value
-                    elif filtered_value:
-                        unnamed_data.append(filtered_value)
-                else:
-                    value = self.__xml_content(node)
-                    if not self.__event_value_is_valid(value):
-                        continue
-                    event_data[self.__pascal_to_camelcase(element)] = (
-                        self.__trim_trailing_whitespace(value)
-                    )
+                if element != "Data":
+                    event_data[self.__pascal_to_camelcase(element)] = filtered_value
+                elif node.attrib:
+                    self.__add_data_attributes(node, filtered_value, event_data, enrichment_ids)
+                elif filtered_value:
+                    unnamed_data.append(filtered_value)
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:333,
         # 370-637 (E6). Enrichment shares the Level+Keywords gate.
-        if has_level and has_keywords and category_id is not None and subcategory_id is not None:
+        category_id = enrichment_ids.get("categoryId")
+        subcategory_id = enrichment_ids.get("subcategoryId")
+        if has_level_and_keywords and category_id is not None and subcategory_id is not None:
             category, subcategory = self.__get_category_and_subcategory(
                 category_id, subcategory_id)
             if category:
@@ -339,6 +348,7 @@ class EvtxToJson:
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:640-677 (E5).
         # Unlike E6, this block sits outside the Level+Keywords gate.
+        audit_policy_changes_id = enrichment_ids.get("auditPolicyChanges")
         if audit_policy_changes_id is not None:
             audit_policy_changes = self.__get_audit_policy_changes(
                 audit_policy_changes_id)
@@ -350,20 +360,35 @@ class EvtxToJson:
         if unnamed_data:
             event_data["data"] = self.__truncate_utf8(", ".join(unnamed_data), 65535)
 
-        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:697-715 (E7).
-        if event_data:
-            standardized_win["eventdata"] = event_data
+        return event_data
 
+    def __add_data_attributes(self, node: ElementTree.Element, filtered_value: str,
+                              event_data: dict, enrichment_ids: dict) -> None:
+        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:228-270 (E1, E3,
+        # E5, E6). A Name attribute ends the scan; any attribute before it uses
+        # its value, not its name, as the field key.
+        for attr, attr_value in node.attrib.items():
+            key = self.__pascal_to_camelcase(str(attr_value))
+            if self.__xml_tag(attr) != "Name":
+                event_data[key] = filtered_value
+                continue
+            if key in ("categoryId", "subcategoryId", "auditPolicyChanges"):
+                enrichment_ids[key] = filtered_value
+            if key == "auditPolicyChanges":
+                event_data["auditPolicyChangesId"] = filtered_value
+            else:
+                event_data[key] = filtered_value
+            break
+
+    def __parse_extra_data(self, event: ElementTree.Element) -> tuple[Optional[str], dict]:
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:294-321,
         # 716-718 (O1). All unexpected top-level children share one object;
         # the last direct child supplies its final object name.
         extra_data: dict = {}
         extra_name: Optional[str] = None
         for top_node in event:
-            top_element = self.__xml_tag(top_node.tag)
-            if top_element in ("System", "EventData"):
+            if self.__xml_tag(top_node.tag) in ("System", "EventData"):
                 continue
-
             for child_node in top_node:
                 extra_name = self.__xml_tag(child_node.tag)
                 for grandchild_node in child_node:
@@ -374,12 +399,7 @@ class EvtxToJson:
                     extra_data[self.__pascal_to_camelcase(grandchild_element)] = (
                         self.__trim_trailing_whitespace(value)
                     )
-
-        if extra_name is not None:
-            standardized_win[self.__pascal_to_camelcase(extra_name)] = extra_data
-
-        # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:725 (S1-S3).
-        return self.__serialize({"win": standardized_win})
+        return extra_name, extra_data
 
     def __format_message(self, event_handle, provider_name: str) -> Optional[str]:
         # Wazuh 4.14.10: src/logcollector/read_win_event_channel.c get_message()
@@ -537,27 +557,22 @@ class EvtxToJson:
     def __parse_strtol(self, value: Optional[str], base: int) -> int:
         # C strtol(): leading whitespace, optional sign, longest valid prefix;
         # 0 when there is no number; clamped to the 64-bit long range.
-        if value is None:
-            return 0
-        pattern = r"^[ \t\n\r\v\f]*([+-]?[0-9]+)" if base == 10 else r"^[ \t\n\r\v\f]*([+-]?(?:0[xX])?[0-9A-Fa-f]+)"
-        match = re.match(pattern, value)
-        if not match:
-            return 0
-        return max(-(1 << 63), min(int(match.group(1), base), (1 << 63) - 1))
+        parsed = self.__parse_c_integer(value, base)
+        return max(-(1 << 63), min(parsed, (1 << 63) - 1))
 
     def __parse_strtoull(self, value: Optional[str], base: int) -> int:
         # C strtoull(): a negative number wraps modulo 2**64 and overflow
         # saturates at ULLONG_MAX.
+        parsed = self.__parse_c_integer(value, base)
+        magnitude = min(abs(parsed), (1 << 64) - 1)
+        return (-magnitude) % (1 << 64) if parsed < 0 else magnitude
+
+    def __parse_c_integer(self, value: Optional[str], base: int) -> int:
         if value is None:
             return 0
         pattern = r"^[ \t\n\r\v\f]*([+-]?[0-9]+)" if base == 10 else r"^[ \t\n\r\v\f]*([+-]?(?:0[xX])?[0-9A-Fa-f]+)"
         match = re.match(pattern, value)
-        if not match:
-            return 0
-        digits = match.group(1)
-        negative = digits.startswith("-")
-        magnitude = min(int(digits.lstrip("+-"), base), (1 << 64) - 1)
-        return (-magnitude) % (1 << 64) if negative else magnitude
+        return int(match.group(1), base) if match else 0
 
     def __serialize(self, value: dict) -> str:
         # cJSON_PrintUnformatted emits compact JSON and raw UTF-8 (S1, S2).
