@@ -1,9 +1,12 @@
-"""Fixture parity with the Wazuh 4.14.10 ruleset EventChannel test events.
+"""Fixture parity with pre-built EventChannel events used for rule testing.
 
-The 62 `{"win":...}` events in ruleset/testing/tests/{win_event_channel,sysmon,
-powershell}.ini are pre-built JSON fed through the generic JSON decoder, so they
-confirm value formats but not key order or bytes. Each event is checked in two
-ways:
+Sources:
+- the 62 `{"win":...}` events in Wazuh 4.14.10
+  ruleset/testing/tests/{win_event_channel,sysmon,powershell}.ini;
+- the 9 events in zbalkan/wazuh-rule-tests tests/test_win_security_rules.py.
+
+Both are pre-built JSON fed through the generic JSON decoder, so they confirm
+value formats but not key order or bytes. Each event is checked in two ways:
 
 - value-format invariants shared with the spec (X1, X2, A1, E1, Y2, Y4);
 - a round trip: the event is turned back into single-quoted EvtRender-style XML
@@ -22,12 +25,18 @@ import win32evtlog
 from wazuhevtx.evtx2json import EvtxToJson
 
 
-FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures" / "wazuh_ruleset"
-FIXTURE_FILES = ("win_event_channel.ini", "sysmon.ini", "powershell.ini")
+FIXTURE_DIR = pathlib.Path(__file__).parent / "fixtures"
+RULESET_FILES = ("win_event_channel.ini", "sysmon.ini", "powershell.ini")
+RULE_TESTS_FILE = "win_security_rules.jsonl"
 
-# Hand-authored 4104 events upstream: the message is raw script text without
-# the Y4 quotes, and powershell.ini:2 ends scriptBlockText with a lone "\".
-OUTLIERS = {("powershell.ini", line) for line in (2, 8, 14, 20, 50)}
+OUTLIERS = {
+    # Hand-authored 4104 events upstream: the message is raw script text without
+    # the Y4 quotes, and powershell.ini:2 ends scriptBlockText with a lone "\".
+    *{("powershell.ini", line) for line in (2, 8, 14, 20, 50)},
+    # Truncated 4698 event: the message has no closing quote, which
+    # cJSON_PrintUnformatted always adds, and taskContent is a bare "&lt".
+    (RULE_TESTS_FILE, "a_scheduled_task_was_created"),
+}
 
 DERIVED_SYSTEM = {"severityValue", "message"}
 DERIVED_EVENTDATA = {"category", "subcategory", "auditPolicyChanges"}
@@ -40,12 +49,16 @@ PROVIDER_ATTRIBUTES = {
 
 def load_fixtures():
     fixtures = []
-    for name in FIXTURE_FILES:
-        lines = (FIXTURE_DIR / name).read_text(encoding="utf-8").splitlines()
-        for number, line in enumerate(lines, 1):
+    for name in RULESET_FILES:
+        path = FIXTURE_DIR / "wazuh_ruleset" / name
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             match = re.match(r"log \d+ pass = (\{.*)$", line)
             if match:
                 fixtures.append((name, number, json.loads(match.group(1))))
+    path = FIXTURE_DIR / "wazuh_rule_tests" / RULE_TESTS_FILE
+    for line in path.read_text(encoding="utf-8").splitlines():
+        case = json.loads(line)
+        fixtures.append((RULE_TESTS_FILE, case["id"], json.loads(case["log"])))
     return fixtures
 
 
@@ -126,9 +139,11 @@ def rebuild_xml(win):
 
 
 def test_fixture_counts():
-    """62 EventChannel fixtures upstream; 5 hand-authored outliers are excluded."""
-    assert len(FIXTURES) == 62
-    assert len(PARITY) == 57
+    """62 upstream ruleset events plus 9 rule-test events; 6 outliers excluded."""
+    ruleset = [f for f in FIXTURES if f[0] in RULESET_FILES]
+    assert len(ruleset) == 62
+    assert len(FIXTURES) - len(ruleset) == 9
+    assert len(PARITY) == 65
     assert {(name, number) for name, number, _ in FIXTURES} >= OUTLIERS
 
 
@@ -177,8 +192,8 @@ def test_fixture_round_trip_matches_wazuhevtx(monkeypatch, name, number, fixture
 
 @pytest.mark.parametrize(
     "name, number",
-    sorted(OUTLIERS),
-    ids=[f"{name}:{number}" for name, number in sorted(OUTLIERS)],
+    sorted(OUTLIERS, key=str),
+    ids=[f"{name}:{number}" for name, number in sorted(OUTLIERS, key=str)],
 )
 def test_excluded_outliers_are_hand_authored(name, number):
     """The excluded events really lack the Y4 quotes, so the exclusion stays honest."""
