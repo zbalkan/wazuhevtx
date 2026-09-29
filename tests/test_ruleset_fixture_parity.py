@@ -33,8 +33,10 @@ OUTLIERS = {
     # Hand-authored 4104 events upstream: the message is raw script text without
     # the Y4 quotes, and powershell.ini:2 ends scriptBlockText with a lone "\".
     *{("powershell.ini", line) for line in (2, 8, 14, 20, 50)},
-    # Truncated 4698 event: the message has no closing quote, which
-    # cJSON_PrintUnformatted always adds, and taskContent is a bare "&lt".
+    # 4698 event, identical in upstream ruleset/testing/tests/win_security.ini:32.
+    # It is a valid rule test, but it cannot be DecodeWinevt output: the message
+    # has no closing quote, which cJSON_PrintUnformatted always adds, and
+    # taskContent is cut to "&lt".
     (RULE_TESTS_FILE, "a_scheduled_task_was_created"),
 }
 
