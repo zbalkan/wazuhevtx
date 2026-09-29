@@ -14,7 +14,7 @@ pywintypes.error = WinErr
 
 win32evtlog = types.ModuleType("win32evtlog")
 win32evtlog.EvtRenderEventXml = 1
-win32evtlog.EvtFormatMessageXml = 9
+win32evtlog.EvtFormatMessageEvent = 1
 win32evtlog.EvtQueryFilePath = 1
 win32evtlog.EvtQueryForwardDirection = 0x100
 win32evtlog.EvtRender = lambda raw, flags: raw

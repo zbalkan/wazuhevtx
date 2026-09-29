@@ -12,7 +12,6 @@ from typing import Any, Generator, Optional
 
 import pywintypes
 import win32evtlog
-import xmltodict
 
 
 class EvtxToJson:
@@ -146,8 +145,8 @@ class EvtxToJson:
                     yield parsed_event
 
     def __parse_raw_event(self, raw_event) -> Optional[str]:
-        record = win32evtlog.EvtRender(
-            raw_event, win32evtlog.EvtRenderEventXml)
+        record = self.__replace_lone_surrogates(win32evtlog.EvtRender(
+            raw_event, win32evtlog.EvtRenderEventXml))
 
         # Wazuh 4.14.10: src/logcollector/read_win_event_channel.c:482-519
         # (A1, A2). The provider message is rendered before the XML whitespace
@@ -235,9 +234,8 @@ class EvtxToJson:
                         elif attr == "ThreadID":
                             event_system["threadID"] = str(value)
                 elif element == "Channel":
-                    value = self.__xml_content(node)
-                    if value is not None:
-                        event_system["channel"] = value
+                    # Upstream adds channel unconditionally, even when empty.
+                    event_system["channel"] = self.__xml_content(node, empty="")
                 elif element == "Security":
                     continue
                 elif element == "Level":
@@ -256,7 +254,8 @@ class EvtxToJson:
                         event_system[self.__pascal_to_camelcase(element)] = value
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:333-366
-        # (Y3). Both elements are required. Non-numeric levels map to UNKNOWN.
+        # (Y3). Both elements are required. strtol() yields 0 for a non-numeric
+        # or empty level, which takes the AUDIT branch like any level 0.
         if has_level and has_keywords:
             level_n = self.__parse_strtol(level, 10)
             keywords_n = self.__parse_strtoull(keywords, 16)
@@ -272,8 +271,6 @@ class EvtxToJson:
                     severity_value = "AUDIT_FAILURE"
                 elif keywords_n & self.StandardEventKeywords.AuditSuccess.value:
                     severity_value = "AUDIT_SUCCESS"
-            if level_n is None:
-                severity_value = "UNKNOWN"
             event_system["severityValue"] = severity_value or "UNKNOWN"
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:64-86,
@@ -341,7 +338,8 @@ class EvtxToJson:
                 event_data["subcategory"] = subcategory
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:640-677 (E5).
-        if audit_policy_changes_id is not None:
+        # Decoding shares the Level+Keywords gate; the raw ID is kept regardless.
+        if has_level and has_keywords and audit_policy_changes_id is not None:
             audit_policy_changes = self.__get_audit_policy_changes(
                 audit_policy_changes_id)
             if audit_policy_changes:
@@ -384,15 +382,26 @@ class EvtxToJson:
         return self.__serialize({"win": standardized_win})
 
     def __format_message(self, event_handle, provider_name: str) -> Optional[str]:
+        # Wazuh 4.14.10: src/logcollector/read_win_event_channel.c get_message()
+        # (A2, Y4). Publisher metadata comes from the local registry (no log
+        # file path) and the message is rendered with EvtFormatMessageEvent,
+        # so CR/LF and surrounding whitespace are kept verbatim.
         try:
             metadata = win32evtlog.EvtOpenPublisherMetadata(
-                PublisherIdentity=provider_name, Session=None, LogFilePath=self._path, Locale=0, Flags=0)
-            xml: str = win32evtlog.EvtFormatMessage(
-                metadata, event_handle, win32evtlog.EvtFormatMessageXml)
-            return str(xmltodict.parse(
-                xml)['Event']['RenderingInfo']['Message'])
+                PublisherIdentity=provider_name, Session=None, LogFilePath=None, Locale=0, Flags=0)
+            message = win32evtlog.EvtFormatMessage(
+                metadata, event_handle, win32evtlog.EvtFormatMessageEvent)
         except Exception:
             return None
+        if message is None:
+            return None
+        return self.__replace_lone_surrogates(str(message))
+
+    def __replace_lone_surrogates(self, value: str) -> str:
+        # Wazuh 4.14.10: convert_windows_string() converts UTF-16 with
+        # WideCharToMultiByte(CP_UTF8), which substitutes U+FFFD for unpaired
+        # surrogates instead of failing.
+        return re.sub("[\ud800-\udfff]", "\ufffd", value)
 
     def __get_audit_policy_changes(self, audit_policy_changes_id: str) -> Optional[str]:
         audit_changes = []
@@ -439,7 +448,7 @@ class EvtxToJson:
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:64-86,683-691;
         # src/shared/string_op.c:952 (Y4).
         serialized = json.dumps(message, ensure_ascii=False, separators=(",", ":"))
-        return self.__unescape_json(serialized).rstrip(" \t\n\r\v\f")
+        return self.__trim_trailing_whitespace(self.__unescape_json(serialized))
 
     def __unescape_json(self, value: str) -> str:
         unescape_map = {
@@ -516,7 +525,13 @@ class EvtxToJson:
         return value is not None and value != "" and value not in ("-", "(NULL)")
 
     def __trim_trailing_whitespace(self, value: str) -> str:
-        return value.rstrip(" \t\n\r\v\f")
+        # Wazuh 4.14.10: replace_win_format() walks back with
+        # `while (end > result && isspace(*end))`, so the first character is
+        # never removed: "  " becomes " ", not "".
+        end = len(value) - 1
+        while end > 0 and value[end] in " \t\n\r\v\f":
+            end -= 1
+        return value[:end + 1]
 
     def __truncate_utf8(self, value: str, size: int) -> str:
         encoded = value.encode("utf-8")
@@ -524,21 +539,30 @@ class EvtxToJson:
             return value
         return encoded[:size].decode("utf-8", errors="ignore")
 
-    def __parse_strtol(self, value: Optional[str], base: int) -> Optional[int]:
+    def __parse_strtol(self, value: Optional[str], base: int) -> int:
+        # C strtol(): leading whitespace, optional sign, longest valid prefix;
+        # 0 when there is no number; clamped to the 64-bit long range.
         if value is None:
-            return None
+            return 0
         pattern = r"^[ \t\n\r\v\f]*([+-]?[0-9]+)" if base == 10 else r"^[ \t\n\r\v\f]*([+-]?(?:0[xX])?[0-9A-Fa-f]+)"
         match = re.match(pattern, value)
         if not match:
-            return None
-        try:
-            return int(match.group(1), base)
-        except ValueError:
-            return None
+            return 0
+        return max(-(1 << 63), min(int(match.group(1), base), (1 << 63) - 1))
 
     def __parse_strtoull(self, value: Optional[str], base: int) -> int:
-        parsed = self.__parse_strtol(value, base)
-        return parsed if parsed is not None and parsed >= 0 else 0
+        # C strtoull(): a negative number wraps modulo 2**64 and overflow
+        # saturates at ULLONG_MAX.
+        if value is None:
+            return 0
+        pattern = r"^[ \t\n\r\v\f]*([+-]?[0-9]+)" if base == 10 else r"^[ \t\n\r\v\f]*([+-]?(?:0[xX])?[0-9A-Fa-f]+)"
+        match = re.match(pattern, value)
+        if not match:
+            return 0
+        digits = match.group(1)
+        negative = digits.startswith("-")
+        magnitude = min(int(digits.lstrip("+-"), base), (1 << 64) - 1)
+        return (-magnitude) % (1 << 64) if negative else magnitude
 
     def __serialize(self, value: dict) -> str:
         # cJSON_PrintUnformatted emits compact JSON and raw UTF-8 (S1, S2).

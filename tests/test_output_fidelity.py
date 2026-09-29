@@ -37,9 +37,7 @@ def enable_message(monkeypatch, message):
     monkeypatch.setattr(
         win32evtlog,
         "EvtFormatMessage",
-        lambda *args, **kwargs: (
-            f"<Event><RenderingInfo><Message>{message}</Message></RenderingInfo></Event>"
-        ),
+        lambda *args, **kwargs: message,
     )
 
 
@@ -89,7 +87,7 @@ def test_s3_construction_order(monkeypatch):
 
 def test_a1_agent_xml_whitespace_transform_and_message_exemption(monkeypatch):
     """A1: logcollector.c:1140-1163 transforms XML only."""
-    enable_message(monkeypatch, "message:&#9;tab&#10;next")
+    enable_message(monkeypatch, "message:\ttab\nnext")
     actual = parse(event(data="<Data Name='S'>line1\r\n\tline2:\tend </Data>"))
     assert '"s":"line1   line2: end"' in actual
     assert '"message":"\\\"message:\\ttab\\nnext\\\""' in actual
@@ -245,13 +243,16 @@ def test_y3_level_mapping_audit_and_non_numeric():
     failure_kw = '<Keywords>0x8010000000000000</Keywords>'
     assert '"severityValue":"AUDIT_FAILURE"' in parse(event(level="0", keywords=failure_kw))
     assert '"severityValue":"UNKNOWN"' in parse(event(level="6"))
-    assert '"severityValue":"UNKNOWN"' in parse(event(level="not-a-level"))
+    # C strtol() returns 0 for a non-numeric or empty level: the AUDIT branch.
+    assert '"severityValue":"AUDIT_SUCCESS"' in parse(event(level="not-a-level"))
+    assert '"severityValue":"AUDIT_SUCCESS"' in parse(event(level=""))
+    assert '"severityValue":"UNKNOWN"' in parse(event(level="not-a-level", keywords="<Keywords>0x0</Keywords>"))
     assert "severityValue" not in parse(event(level="0", keywords=""))
 
 
 def test_y4_message_keeps_quotes_and_unescapes_once(monkeypatch):
     """Y4: winevtchannel.c:64-86,683-691; string_op.c:952."""
-    enable_message(monkeypatch, 'hello&#10;&quot;world&quot; \\ path')
+    enable_message(monkeypatch, 'hello\n"world" \\ path')
     actual = parse(event())
     assert '"message":"\\\"hello\\n\\\"world\\\" \\\\ path\\\""' in actual
 
@@ -389,3 +390,69 @@ def test_x4_parse_failure_keeps_rendered_message_only(monkeypatch, capsys):
     )
     assert parse(xml) == '{"win":{"system":{"message":"\\\"Rendered\\\""}}}'
     assert "record ID 44" in capsys.readouterr().err
+
+
+def test_y4_message_keeps_crlf_and_surrounding_whitespace(monkeypatch):
+    """Y4/A2: EvtFormatMessageEvent text reaches analysisd verbatim; the trim is
+    a no-op because the quoted message ends with '"'."""
+    enable_message(monkeypatch, "  An account was logged on.\r\n\r\nSubject:\r\n\tSecurity ID:\t\tS-1-5-18\r\n")
+    actual = parse(event())
+    assert (
+        '"message":"\\"  An account was logged on.\\r\\n\\r\\nSubject:\\r\\n'
+        '\\tSecurity ID:\\t\\tS-1-5-18\\r\\n\\""' in actual
+    )
+
+
+def test_a2_empty_rendered_message_is_empty_not_none(monkeypatch):
+    """A2: an empty rendered message is still added as Message."""
+    enable_message(monkeypatch, "")
+    assert '"message":"\\"\\""' in parse(event())
+
+
+def test_a2_publisher_metadata_is_read_from_local_registry(monkeypatch):
+    """A2: get_message() calls EvtOpenPublisherMetadata without a log file path."""
+    seen = {}
+
+    def metadata(**kwargs):
+        seen.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(win32evtlog, "EvtOpenPublisherMetadata", metadata)
+    monkeypatch.setattr(win32evtlog, "EvtFormatMessage", lambda *args, **kwargs: "m")
+    parse(event())
+    assert seen["PublisherIdentity"] == "P"
+    assert seen["LogFilePath"] is None
+
+
+def test_e5_audit_policy_decoding_shares_level_keywords_gate():
+    """E5: the auditPolicyChanges translation is nested in if(level && keywords)."""
+    data = "<Data Name='AuditPolicyChanges'>%%8449</Data>"
+    actual = parse(event(keywords="", data=data))
+    assert '"eventdata":{"auditPolicyChangesId":"%%8449"}' in actual
+    assert '"auditPolicyChanges":' not in actual
+
+
+def test_e1_e2_whitespace_only_values_keep_first_character():
+    """E1/E2/O1: replace_win_format() never trims the first character."""
+    actual = parse(event(
+        data="<Data Name='A'>  </Data><Data>\t </Data><Binary> \t</Binary>",
+        extra="<UserData><U><V>  </V></U></UserData>",
+    ))
+    # Under X2 a TAB is the two characters "\\t" when trimmed, so it survives.
+    assert '"eventdata":{"a":" ","binary":" \\\\t","data":"\\\\t"}' in actual
+    assert '"u":{"v":" "}' in actual
+
+
+def test_y2_empty_channel_is_emitted():
+    """Y2: winevtchannel.c adds channel without an emptiness check."""
+    actual = parse("<Event><System><Channel></Channel><EventID>1</EventID></System></Event>")
+    assert actual == '{"win":{"system":{"channel":"","eventID":"1"}}}'
+
+
+def test_lone_surrogates_become_replacement_character(monkeypatch):
+    """convert_windows_string() replaces unpaired UTF-16 surrogates with U+FFFD."""
+    enable_message(monkeypatch, "m\udc00")
+    actual = parse(event(data="<Data Name='S'>a\ud800b</Data>"))
+    assert '"s":"a\ufffdb"' in actual
+    assert '"message":"\\"m\ufffd\\""' in actual
+    actual.encode("utf-8")
