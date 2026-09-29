@@ -248,6 +248,11 @@ def test_y3_level_mapping_audit_and_non_numeric():
     assert '"severityValue":"AUDIT_SUCCESS"' in parse(event(level=""))
     assert '"severityValue":"UNKNOWN"' in parse(event(level="not-a-level", keywords="<Keywords>0x0</Keywords>"))
     assert "severityValue" not in parse(event(level="0", keywords=""))
+    # Upstream unit test test_winevt_dec_systemNode_ok: both strtol() and
+    # strtoull() yield 0, so level 0 without audit bits falls through to UNKNOWN.
+    upstream = parse(event(level="info/warn/error", keywords="<Keywords>keyword1/keyword2</Keywords>"))
+    assert '"level":"info/warn/error","keywords":"keyword1/keyword2"' in upstream
+    assert '"severityValue":"UNKNOWN"' in upstream
 
 
 def test_y4_message_keeps_quotes_and_unescapes_once(monkeypatch):
@@ -424,12 +429,14 @@ def test_a2_publisher_metadata_is_read_from_local_registry(monkeypatch):
     assert seen["LogFilePath"] is None
 
 
-def test_e5_audit_policy_decoding_shares_level_keywords_gate():
-    """E5: the auditPolicyChanges translation is nested in if(level && keywords)."""
+def test_e5_audit_policy_decoding_is_not_gated_on_level_keywords():
+    """E5: in 4.14.10 the auditPolicyChanges block sits outside if(level && keywords)."""
     data = "<Data Name='AuditPolicyChanges'>%%8449</Data>"
     actual = parse(event(keywords="", data=data))
-    assert '"eventdata":{"auditPolicyChangesId":"%%8449"}' in actual
-    assert '"auditPolicyChanges":' not in actual
+    assert (
+        '"eventdata":{"auditPolicyChangesId":"%%8449",'
+        '"auditPolicyChanges":"Success added"}' in actual
+    )
 
 
 def test_e1_e2_whitespace_only_values_keep_first_character():

@@ -338,8 +338,8 @@ class EvtxToJson:
                 event_data["subcategory"] = subcategory
 
         # Wazuh 4.14.10: src/analysisd/decoders/winevtchannel.c:640-677 (E5).
-        # Decoding shares the Level+Keywords gate; the raw ID is kept regardless.
-        if has_level and has_keywords and audit_policy_changes_id is not None:
+        # Unlike E6, this block sits outside the Level+Keywords gate.
+        if audit_policy_changes_id is not None:
             audit_policy_changes = self.__get_audit_policy_changes(
                 audit_policy_changes_id)
             if audit_policy_changes:
@@ -406,10 +406,8 @@ class EvtxToJson:
     def __get_audit_policy_changes(self, audit_policy_changes_id: str) -> Optional[str]:
         audit_changes = []
         for change_id in audit_policy_changes_id.replace('%%', '').split(','):
-            try:
-                change = self.__audit_policy_changes_map.get(int(change_id))
-            except ValueError:
-                change = None
+            change = self.__audit_policy_changes_map.get(
+                self.__parse_strtol(change_id, 10))
             if change:
                 audit_changes.append(change)
 
@@ -417,11 +415,8 @@ class EvtxToJson:
 
     def __get_category_and_subcategory(
             self, category_id: str, subcategory_id: str) -> tuple[Optional[str], Optional[str]]:
-        try:
-            category_id_n = int(category_id.replace('%%', ''), base=10)
-            subcategory_id_n = int(subcategory_id.replace('%%', ''), base=10)
-        except ValueError:
-            return None, None
+        category_id_n = self.__parse_strtol(category_id.replace('%%', ''), 10)
+        subcategory_id_n = self.__parse_strtol(subcategory_id.replace('%%', ''), 10)
 
         category_mapping = self.__category_mapping.get(category_id_n, {})
         category = category_mapping.get("name")
