@@ -255,6 +255,19 @@ def test_y3_level_mapping_audit_and_non_numeric():
     assert '"severityValue":"UNKNOWN"' in upstream
 
 
+def test_y3_keywords_follow_c_strtoull_edge_cases():
+    """Y3: alignment with C strtoull(); real Keywords never hit these cases."""
+    converter, _ = parser()
+    strtoull = converter._EvtxToJson__parse_strtoull
+    assert strtoull("-1", 16) == (1 << 64) - 1
+    assert strtoull("0x" + "F" * 17, 16) == (1 << 64) - 1
+    # A negative magnitude beyond ULLONG_MAX also returns ULLONG_MAX.
+    assert strtoull("-0x" + "1" + "0" * 16, 16) == (1 << 64) - 1
+    # ULLONG_MAX has both audit bits set, so level 0 maps to AUDIT_FAILURE.
+    kw = "<Keywords>-0x10000000000000000</Keywords>"
+    assert '"severityValue":"AUDIT_FAILURE"' in parse(event(level="0", keywords=kw))
+
+
 def test_y4_message_keeps_quotes_and_unescapes_once(monkeypatch):
     """Y4: winevtchannel.c:64-86,683-691; string_op.c:952."""
     enable_message(monkeypatch, 'hello\n"world" \\ path')

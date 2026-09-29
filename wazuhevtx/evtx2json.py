@@ -561,11 +561,15 @@ class EvtxToJson:
         return max(-(1 << 63), min(parsed, (1 << 63) - 1))
 
     def __parse_strtoull(self, value: Optional[str], base: int) -> int:
-        # C strtoull(): a negative number wraps modulo 2**64 and overflow
-        # saturates at ULLONG_MAX.
+        # C strtoull(): a negative number wraps modulo 2**64, and a magnitude
+        # beyond ULLONG_MAX returns ULLONG_MAX whatever the sign. Real Keywords
+        # never reach this; it is kept only to align with the C code in
+        # winevtchannel.c.
+        ullong_max = (1 << 64) - 1
         parsed = self.__parse_c_integer(value, base)
-        magnitude = min(abs(parsed), (1 << 64) - 1)
-        return (-magnitude) % (1 << 64) if parsed < 0 else magnitude
+        if abs(parsed) > ullong_max:
+            return ullong_max
+        return parsed % (1 << 64)
 
     def __parse_c_integer(self, value: Optional[str], base: int) -> int:
         if value is None:
