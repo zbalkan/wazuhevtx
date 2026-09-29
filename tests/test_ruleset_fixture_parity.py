@@ -11,20 +11,17 @@ confirm value formats but not key order or bytes. Each event is checked in two
 ways:
 
 - value-format invariants shared with the spec (X1, X2, A1, E1, Y2, Y4);
-- a round trip: the event is turned back into single-quoted EvtRender-style XML
-  (each value X2-unescaped once, the message stubbed as the rendered text) and
-  run through wazuhevtx. The decoded fields must equal the fixture's. Derived
-  fields (severityValue, category, subcategory, auditPolicyChanges) are not put
-  back into the XML, so wazuhevtx must recompute them (Y3, E5, E6).
+- a round trip through fixture_xml.rebuild_xml and wazuhevtx: the decoded
+  fields must equal the fixture's, and derived fields must be recomputed
+  (Y3, E5, E6).
 """
 import json
 import pathlib
 import re
 
 import pytest
-import win32evtlog
 
-from wazuhevtx.evtx2json import EvtxToJson
+from fixture_xml import DERIVED_EVENTDATA, DERIVED_SYSTEM, convert, x2_unescape
 
 
 FIXTURE_FILE = pathlib.Path(__file__).parent / "fixtures" / "rule_test_events.jsonl"
@@ -38,15 +35,6 @@ OUTLIERS = {
     # and taskContent is cut to "&lt".
     "win_security.ini:32",
 }
-
-DERIVED_SYSTEM = {"severityValue", "message"}
-DERIVED_EVENTDATA = {"category", "subcategory", "auditPolicyChanges"}
-PROVIDER_ATTRIBUTES = {
-    "providerName": "Name",
-    "providerGuid": "Guid",
-    "eventSourceName": "EventSourceName",
-}
-
 
 def load_fixtures():
     fixtures = []
@@ -69,67 +57,6 @@ def xml_derived_values(win):
             if section == "eventdata" and key in DERIVED_EVENTDATA:
                 continue
             yield f"{section}.{key}", value
-
-
-def x2_unescape(value):
-    return json.loads('"' + value + '"')
-
-
-def upper_first(name):
-    return name[:1].upper() + name[1:]
-
-
-def rebuild_xml(win):
-    provider = []
-    system = []
-    for key, value in win["system"].items():
-        if key in DERIVED_SYSTEM:
-            continue
-        raw = x2_unescape(value)
-        if key in PROVIDER_ATTRIBUTES:
-            provider.append((PROVIDER_ATTRIBUTES[key], raw))
-        elif key == "systemTime":
-            system.append(f"<TimeCreated SystemTime='{raw}'/>")
-        elif key == "processID":
-            system.append(f"<Execution ProcessID='{raw}'/>")
-        elif key == "threadID":
-            system.append(f"<Execution ThreadID='{raw}'/>")
-        else:
-            system.append(f"<{upper_first(key)}>{raw}</{upper_first(key)}>")
-
-    # EvtRender writes Name first; the agent looks for "Provider Name=" (A2).
-    order = list(PROVIDER_ATTRIBUTES.values())
-    provider.sort(key=lambda attribute: order.index(attribute[0]))
-    attributes = " ".join(f"{name}='{raw}'" for name, raw in provider)
-    xml = "<Event><System>"
-    if provider:
-        xml += f"<Provider {attributes}/>"
-    xml += "".join(system) + "</System>"
-
-    if "eventdata" in win:
-        xml += "<EventData>"
-        for key, value in win["eventdata"].items():
-            if key in DERIVED_EVENTDATA:
-                continue
-            raw = x2_unescape(value)
-            if key == "data":
-                xml += f"<Data>{raw}</Data>"
-            else:
-                if key == "auditPolicyChangesId":
-                    key = "auditPolicyChanges"
-                xml += f"<Data Name='{upper_first(key)}'>{raw}</Data>"
-        xml += "</EventData>"
-
-    for section, fields in win.items():
-        if section in ("system", "eventdata"):
-            continue
-        children = "".join(
-            f"<{upper_first(key)}>{x2_unescape(value)}</{upper_first(key)}>"
-            for key, value in fields.items()
-        )
-        xml += f"<UserData><{upper_first(section)}>{children}</{upper_first(section)}></UserData>"
-
-    return xml + "</Event>"
 
 
 def test_fixture_counts():
@@ -170,14 +97,7 @@ def test_fixture_value_invariants(source, fixture):
 @pytest.mark.parametrize("source, fixture", PARITY, ids=IDS)
 def test_fixture_round_trip_matches_wazuhevtx(monkeypatch, source, fixture):
     """Y1-Y4, E1-E6, O1, X2: rebuilt XML decodes to the fixture's field values."""
-    message = fixture["win"]["system"].get("message")
-    if message is not None:
-        monkeypatch.setattr(win32evtlog, "EvtOpenPublisherMetadata", lambda **kwargs: object())
-        monkeypatch.setattr(win32evtlog, "EvtFormatMessage", lambda *args, **kwargs: message[1:-1])
-
-    converter = EvtxToJson()
-    converter._path = "x.evtx"
-    actual = converter._EvtxToJson__parse_raw_event(rebuild_xml(fixture["win"]))
+    actual = convert(monkeypatch, fixture["win"])
 
     # Field values only: fixtures do not preserve DecodeWinevt's key order.
     assert json.loads(actual) == fixture

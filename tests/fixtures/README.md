@@ -1,5 +1,13 @@
 # Test fixtures
 
+`archive_full_logs.jsonl` holds 130 real `full_log` values from a Wazuh 4.14.x
+manager, collected from the maintainer's own environment (Security, System and
+TaskScheduler channels). Every record was decoded by `windows_eventchannel` from
+location `EventChannel`, so each `full_log` is genuine DecodeWinevt output. Each
+line is `{"id": <alert id>, "decoder": ..., "location": ..., "full_log": ...}`,
+with `full_log` stored unchanged. `tests/test_archive_full_log_parity.py` uses
+them for byte-level comparison.
+
 `rule_test_events.jsonl` holds the 71 `{"win":...}` log strings from the Wazuh
 ruleset tests, extracted unchanged from `ruleset/testing/tests/`:
 `win_event_channel.ini` (8), `win_security.ini` (9), `sysmon.ini` (22) and
